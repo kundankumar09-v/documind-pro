@@ -1,0 +1,10 @@
+chroma_db/
+chroma.sqlite3
+__pycache__/
+*.pyc
+backend/env/
+backend/.venv/
+frontend/node_modules/
+frontend/dist/
+.env
+*.log
