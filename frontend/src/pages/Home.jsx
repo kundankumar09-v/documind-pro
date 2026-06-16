@@ -1,59 +1,136 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Shield, Cpu, Lock, Terminal } from 'lucide-react';
+import { Shield, Cpu, Lock, Terminal, ArrowRight, Zap } from 'lucide-react';
 import Navbar from '../components/Navbar';
 
 export default function Home() {
   const navigate = useNavigate();
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#090d16', color: '#f8fafc', fontFamily: 'system-ui, sans-serif', paddingTop: '70px', boxSizing: 'border-box' }}>
+    <div className="home-page">
+      {/* Background elements */}
+      <div className="home-bg-mesh" aria-hidden="true" />
+      <div className="home-bg-grid" aria-hidden="true" />
+
       <Navbar />
-      
-      {/* HERO SECTION */}
-      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '100px 24px 60px 24px', textAlign: 'center' }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 16px', borderRadius: '20px', backgroundColor: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.15)', marginBottom: '24px' }}>
-          <Terminal style={{ color: '#38bdf8', width: '14px' }} />
-          <span style={{ fontSize: '12px', fontWeight: '600', color: '#38bdf8', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Next-Gen Privacy Architecture</span>
+
+      {/* ── HERO SECTION ── */}
+      <section className="hero-section">
+        <div className="hero-badge">
+          <Terminal size={13} />
+          Next-Generation Document Intelligence
         </div>
-        
-        <h1 style={{ fontSize: '56px', fontWeight: '850', lineHeight: '1.1', margin: '0 0 24px 0', letterSpacing: '-1.5px', color: '#fff' }}>
-          Analyze Complex Documents <br />
-          <span style={{ color: '#38bdf8' }}>Completely Offline</span>
+
+        <h1 className="hero-title">
+          Analyze Complex Documents
+          <br />
+          <span className="highlight">Completely Offline</span>
         </h1>
-        
-        <p style={{ fontSize: '18px', color: '#94a3b8', maxWidth: '640px', margin: '0 auto 40px auto', lineHeight: '1.6' }}>
-          Instantly parse, split, and evaluate intelligence parameters inside multi-tenant vector structures using localized AI frameworks. No API leaks. No cloud dependencies.
+
+        <p className="hero-subtitle">
+          Instantly parse, query, and extract intelligence from your documents
+          using local AI. No API leaks. No cloud dependencies. Your data stays yours.
         </p>
-        
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px' }}>
-          <button onClick={() => navigate('/signup')} style={{ height: '52px', padding: '0 32px', borderRadius: '10px', border: 'none', backgroundColor: '#38bdf8', color: '#030712', fontWeight: '700', fontSize: '16px', cursor: 'pointer', transition: 'transform 0.2s' }}>
-            Launch App Space
+
+        <div className="hero-actions">
+          <button className="hero-btn-primary" onClick={() => navigate('/signup')}>
+            Start for Free
+            <ArrowRight size={16} />
           </button>
-          <button onClick={() => navigate('/login')} style={{ height: '52px', padding: '0 32px', borderRadius: '10px', border: '1px solid #1f2937', backgroundColor: '#111827', color: '#fff', fontWeight: '600', fontSize: '16px', cursor: 'pointer' }}>
-            Sign In Securely
+          <button className="hero-btn-secondary" onClick={() => navigate('/login')}>
+            Sign In
           </button>
+        </div>
+      </section>
+
+      {/* ── STATS BAR ── */}
+      <div style={{ position: 'relative', zIndex: 1, maxWidth: '900px', margin: '0 auto 80px', padding: '0 32px' }}>
+        <div className="stats-bar">
+          <div className="stat-item">
+            <div className="stat-number">100%</div>
+            <div className="stat-label">Offline & Private</div>
+          </div>
+          <div className="stat-item">
+            <div className="stat-number">25MB</div>
+            <div className="stat-label">Max Document Size</div>
+          </div>
+          <div className="stat-item">
+            <div className="stat-number">∞</div>
+            <div className="stat-label">Chat Sessions</div>
+          </div>
         </div>
       </div>
 
-      {/* CORE FEATURES GRID */}
-      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '60px 24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', boxSizing: 'border-box' }}>
-        <div style={{ padding: '32px', borderRadius: '16px', backgroundColor: '#111827', border: '1px solid #1f2937' }}>
-          <Cpu style={{ color: '#38bdf8', width: '32px', height: '32px', marginBottom: '16px' }} />
-          <h3 style={{ fontSize: '18px', fontWeight: '700', margin: '0 0 10px 0' }}>Isolated RAG Pipelines</h3>
-          <p style={{ fontSize: '14px', color: '#6b7280', margin: 0, lineHeight: '1.5' }}>Strict metadata containment vectors lock searches strictly to the selected active target trace file.</p>
+      {/* ── FEATURES SECTION ── */}
+      <section className="features-section">
+        <div className="features-grid">
+          <div className="feature-card" style={{ animationDelay: '0s' }}>
+            <div className="feature-icon-wrap">
+              <Cpu size={22} color="var(--brand-accent)" />
+            </div>
+            <h3 className="feature-title">Isolated RAG Pipelines</h3>
+            <p className="feature-desc">
+              Each chat session maintains its own isolated vector store. Documents uploaded
+              to one session never bleed into another — strict metadata containment guaranteed.
+            </p>
+          </div>
+
+          <div className="feature-card" style={{ animationDelay: '0.1s' }}>
+            <div className="feature-icon-wrap">
+              <Lock size={22} color="var(--brand-accent)" />
+            </div>
+            <h3 className="feature-title">Zero Cloud Leakage</h3>
+            <p className="feature-desc">
+              All document extraction and AI inference runs locally on your machine.
+              No third-party API calls. No telemetry. Your files never leave your device.
+            </p>
+          </div>
+
+          <div className="feature-card" style={{ animationDelay: '0.2s' }}>
+            <div className="feature-icon-wrap">
+              <Shield size={22} color="var(--brand-accent)" />
+            </div>
+            <h3 className="feature-title">Multi-Tenant Isolation</h3>
+            <p className="feature-desc">
+              Authenticated sessions isolate each user's workspace and documents.
+              Enterprise-grade access control with JWT-based session management.
+            </p>
+          </div>
+
+          <div className="feature-card" style={{ animationDelay: '0.3s' }}>
+            <div className="feature-icon-wrap">
+              <Zap size={22} color="var(--brand-accent)" />
+            </div>
+            <h3 className="feature-title">Instant Answers</h3>
+            <p className="feature-desc">
+              Ask natural language questions and get precise, cited answers in seconds.
+              Powered by Gemma2 — no internet required, even offline.
+            </p>
+          </div>
+
+          <div className="feature-card" style={{ animationDelay: '0.4s' }}>
+            <div className="feature-icon-wrap">
+              <Terminal size={22} color="var(--brand-accent)" />
+            </div>
+            <h3 className="feature-title">Smart Document Parsing</h3>
+            <p className="feature-desc">
+              Supports PDF and DOCX formats with intelligent chunking and semantic
+              embedding. Handles complex layouts, tables, and multi-page documents.
+            </p>
+          </div>
+
+          <div className="feature-card" style={{ animationDelay: '0.5s' }}>
+            <div className="feature-icon-wrap">
+              <ArrowRight size={22} color="var(--brand-accent)" />
+            </div>
+            <h3 className="feature-title">Citation Tracking</h3>
+            <p className="feature-desc">
+              Every AI response includes traceable source citations back to the
+              exact document sections — full auditability for enterprise compliance.
+            </p>
+          </div>
         </div>
-        <div style={{ padding: '32px', borderRadius: '16px', backgroundColor: '#111827', border: '1px solid #1f2937' }}>
-          <Lock style={{ color: '#38bdf8', width: '32px', height: '32px', marginBottom: '16px' }} />
-          <h3 style={{ fontSize: '18px', fontWeight: '700', margin: '0 0 10px 0' }}>Zero Cloud Vector Leaks</h3>
-          <p style={{ fontSize: '14px', color: '#6b7280', margin: 0, lineHeight: '1.5' }}>All extraction mechanics download, fragment, and save direct base64 coordinates straight to machine drive arrays.</p>
-        </div>
-        <div style={{ padding: '32px', borderRadius: '16px', backgroundColor: '#111827', border: '1px solid #1f2937' }}>
-          <Shield style={{ color: '#38bdf8', width: '32px', height: '32px', marginBottom: '16px' }} />
-          <h3 style={{ fontSize: '18px', fontWeight: '700', margin: '0 0 10px 0' }}>Multi-Tenant Protection</h3>
-          <p style={{ fontSize: '14px', color: '#6b7280', margin: 0, lineHeight: '1.5' }}>Authenticated sessions isolate individual workspace tracking parameters from structural metadata overlaps.</p>
-        </div>
-      </div>
+      </section>
     </div>
   );
 }

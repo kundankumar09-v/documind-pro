@@ -7,21 +7,34 @@ export default function Navbar() {
   const token = localStorage.getItem('dm_token');
 
   return (
-    <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 40px', height: '70px', backgroundColor: '#090d16', borderBottom: '1px solid #1f2937', position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1000, boxSizing: 'border-box' }}>
-      <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
-        <Shield style={{ color: '#38bdf8', width: '26px', height: '26px' }} />
-        <span style={{ fontSize: '20px', fontWeight: '800', color: '#fff', letterSpacing: '-0.5px' }}>DocuMind</span>
+    <nav className="navbar">
+      <Link to="/" className="navbar-brand">
+        {/* Inline SVG shield logo */}
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+          <rect width="28" height="28" rx="8" fill="url(#navGrad)" />
+          <path d="M14 6L7 9.5V15.5C7 19.09 10.13 22.5 14 23C17.87 22.5 21 19.09 21 15.5V9.5L14 6Z"
+            fill="white" fillOpacity="0.9" />
+          <defs>
+            <linearGradient id="navGrad" x1="0" y1="0" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+              <stop stopColor="#2563eb" />
+              <stop offset="1" stopColor="#06b6d4" />
+            </linearGradient>
+          </defs>
+        </svg>
+        <span className="navbar-brand-name">
+          Docu<span>Mind</span>
+        </span>
       </Link>
-      
-      <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+
+      <div className="navbar-actions">
         {token ? (
-          <button onClick={() => navigate('/workspace')} style={{ height: '40px', padding: '0 20px', borderRadius: '8px', border: 'none', backgroundColor: '#38bdf8', color: '#030712', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
+          <button className="navbar-cta" onClick={() => navigate('/workspace')}>
             Go to Workspace
           </button>
         ) : (
           <>
-            <Link to="/login" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: '14px', fontWeight: '500' }}>Log In</Link>
-            <button onClick={() => navigate('/signup')} style={{ height: '40px', padding: '0 20px', borderRadius: '8px', border: 'none', backgroundColor: '#38bdf8', color: '#030712', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
+            <Link to="/login" className="navbar-link">Log In</Link>
+            <button className="navbar-cta" onClick={() => navigate('/signup')}>
               Get Started
             </button>
           </>

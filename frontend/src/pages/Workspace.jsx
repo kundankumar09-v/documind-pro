@@ -1,935 +1,799 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, MessageSquare, Shield, Send, Loader, LogOut, FileText, Sparkles, Plus, Trash2, Files } from 'lucide-react';
+import {
+  Upload, MessageSquare, Shield, Send, LogOut,
+  FileText, Plus, Trash2, Copy, Check,
+  ChevronLeft, ChevronRight, ChevronDown,
+  Pencil, X, Sparkles,
+} from 'lucide-react';
 
+/* ─── Markdown renderer ─────────────────────────────────────────────────────── */
+const TECH_KW = [
+  'Machine Learning','Deep Learning','Neural Network','NLP','LLM','RAG',
+  'Vector','Embedding','Semantic','Retrieval','FastAPI','Docker','Python',
+  'JavaScript','React','PostgreSQL','MongoDB','Redis','AWS','GCP','Azure',
+  'Kubernetes','REST API','GraphQL','WebSocket','OAuth','JWT','OCR','PDF',
+  'RoBERTa','BERT','GPT','Transformer','Tokenization','API','Authentication',
+];
+function hi(text) {
+  if (!text) return text;
+  let o = text;
+  for (const kw of TECH_KW) o = o.replace(new RegExp(`\\b(${kw})\\b`, 'gi'), '**$1**');
+  return o;
+}
+function Inline({ text }) {
+  const parts = hi(text).split(/\*\*([\s\S]*?)\*\*/g);
+  return parts.map((p, i) =>
+    i % 2 === 1
+      ? <strong key={i} style={{ background: 'linear-gradient(90deg,#2563eb,#06b6d4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>{p}</strong>
+      : <span key={i}>{p}</span>
+  );
+}
+function Markdown({ raw }) {
+  if (!raw) return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      {raw.split('\n').map((line, i) => {
+        const t = line.trim();
+        if (!t) return <div key={i} style={{ height: 8 }} />;
+        if (t.startsWith('### ')) return <h4 key={i} style={{ fontSize: 13.5, fontWeight: 700, color: '#06b6d4', margin: '14px 0 8px', letterSpacing: '0.02em' }}>{t.slice(4)}</h4>;
+        if (t.startsWith('## '))  return <h3 key={i} style={{ fontSize: 15, fontWeight: 800, color: '#93c5fd', margin: '16px 0 10px' }}>{t.slice(3)}</h3>;
+        if (t.startsWith('# '))   return <h2 key={i} style={{ fontSize: 17, fontWeight: 800, background: 'linear-gradient(90deg,#2563eb,#06b6d4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', margin: '18px 0 12px' }}>{t.slice(2)}</h2>;
+        if (/^\d+\.\s/.test(t)) {
+          const m = t.match(/^\d+\.\s(.+)$/);
+          return m ? <div key={i} style={{ marginBottom: 8, paddingLeft: 22, color: '#cbd5e1', fontSize: 14, lineHeight: 1.75, display: 'list-item', listStyleType: 'decimal', listStylePosition: 'outside' }}><Inline text={m[1]} /></div> : null;
+        }
+        if (t.startsWith('- ') || t.startsWith('* ')) return <div key={i} style={{ marginBottom: 8, paddingLeft: 18, color: '#cbd5e1', fontSize: 14, lineHeight: 1.75, display: 'list-item', listStyleType: 'disc', listStylePosition: 'outside' }}><Inline text={t.slice(2)} /></div>;
+        return <p key={i} style={{ marginBottom: 10, color: '#cbd5e1', fontSize: 14, lineHeight: 1.75 }}><Inline text={t} /></p>;
+      })}
+    </div>
+  );
+}
+
+/* ─── Copy button component ─────────────────────────────────────────────────── */
+function CopyButton({ text }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+  return (
+    <button onClick={handleCopy} title="Copy response" style={{
+      position: 'absolute', top: 10, right: 10,
+      background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
+      borderRadius: 6, padding: '4px 8px', cursor: 'pointer',
+      display: 'flex', alignItems: 'center', gap: 5,
+      color: copied ? 'var(--success)' : 'var(--text-muted)',
+      fontSize: 11, fontWeight: 600,
+      transition: 'all 0.2s',
+    }}>
+      {copied ? <Check size={12} /> : <Copy size={12} />}
+      {copied ? 'Copied' : 'Copy'}
+    </button>
+  );
+}
+
+/* ─── Session rename inline editor ─────────────────────────────────────────── */
+function SessionTitle({ title, onRename }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(title);
+  const inputRef = useRef(null);
+
+  useEffect(() => { if (editing) inputRef.current?.focus(); }, [editing]);
+
+  const commit = () => {
+    const trimmed = val.trim();
+    if (trimmed && trimmed !== title) onRename(trimmed);
+    else setVal(title);
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        value={val}
+        onChange={e => setVal(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setVal(title); setEditing(false); } }}
+        style={{
+          flex: 1, background: 'transparent', border: 'none',
+          borderBottom: '1px solid var(--brand-accent)',
+          color: 'var(--text-primary)', fontSize: 13, outline: 'none',
+          padding: '1px 0', fontFamily: 'var(--font-sans)',
+        }}
+        maxLength={40}
+      />
+    );
+  }
+  return (
+    <span
+      className="session-item-title"
+      onDoubleClick={() => setEditing(true)}
+      title="Double-click to rename"
+    >
+      {title}
+    </span>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   WORKSPACE COMPONENT
+═══════════════════════════════════════════════════════════════════════════ */
 export default function Workspace() {
   const navigate = useNavigate();
-  const identityReference = localStorage.getItem('dm_user_identity') || 'user@domain.com';
-  const username = identityReference.split('@')[0];
-  const chatEndRef = useRef(null);
+  const userEmail = localStorage.getItem('dm_user_identity') || 'user@domain.com';
+  const username  = userEmail.split('@')[0];
+  const chatEndRef    = useRef(null);
+  const messagesRef   = useRef(null);
 
+  /* ── Core state ── */
+  const [sessions, setSessions]           = useState([]);
+  const [activeSessionId, setActiveId]    = useState(null);
+  const [uploading, setUploading]         = useState(false);
+  const [question, setQuestion]           = useState('');
+  const [streaming, setStreaming]         = useState(false);
+  const [dragOver, setDragOver]           = useState(false);
+  const [selectedFile, setSelectedFile]   = useState(null);
+  const [sidebarOpen, setSidebarOpen]     = useState(true);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [summaryMap, setSummaryMap]       = useState({}); // { sessionId: { filename, summary, pages, chunks } }
+  const [backendOk, setBackendOk]         = useState(null); // null=unknown, true/false
+
+  /* ── Auth guard ── */
+  useEffect(() => { if (!localStorage.getItem('dm_token')) navigate('/login'); }, [navigate]);
+
+  /* ── Backend health check ── */
   useEffect(() => {
-    if (!localStorage.getItem('dm_token')) navigate('/login');
-  }, [navigate]);
+    fetch('/health').then(r => setBackendOk(r.ok)).catch(() => setBackendOk(false));
+  }, []);
 
-  // ChatGPT State Management Core
-  const [sessions, setSessions] = useState([]); 
-  const [activeSessionId, setActiveSessionId] = useState(null);
-  const [uploadedFiles, setUploadedFiles] = useState([]); 
-  const [uploading, setUploading] = useState(false);
-  const [question, setQuestion] = useState('');
-  const [loadingAnswer, setLoadingAnswer] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
-  const [selectedFile, setSelectedFile] = useState(null);
-
-  // Load chat memory from browser storage on initial boot
+  /* ── Load sessions ── */
   useEffect(() => {
-    const savedSessions = localStorage.getItem(`dm_sessions_${username}`);
-    const savedFiles = localStorage.getItem(`dm_files_${username}`);
-    
-    if (savedSessions) {
-      const parsed = JSON.parse(savedSessions);
-      const normalized = parsed.map((session) => ({ ...session, files: session.files || [] }));
-      setSessions(normalized);
-      if (normalized.length > 0) {
-        setActiveSessionId(normalized[0].id); // Default load the most recent chat session
-      }
+    const saved = localStorage.getItem(`dm_sessions_${username}`);
+    if (saved) {
+      const parsed = JSON.parse(saved).map(s => ({ ...s, files: s.files || [] }));
+      setSessions(parsed);
+      if (parsed.length > 0) setActiveId(parsed[0].id);
     } else {
-      // If zero history exists, clear a space and seed an initial pristine chat session
-      const initialId = 'sess_' + Date.now();
-      const defaultSess = [{ id: initialId, title: 'New Chat Session', history: [], files: [] }];
-      setSessions(defaultSess);
-      setActiveSessionId(initialId);
-      localStorage.setItem(`dm_sessions_${username}`, JSON.stringify(defaultSess));
+      const id  = 'sess_' + Date.now();
+      const def = [{ id, title: 'New Chat', history: [], files: [] }];
+      setSessions(def);
+      setActiveId(id);
+      localStorage.setItem(`dm_sessions_${username}`, JSON.stringify(def));
     }
-
-    if (savedFiles) setUploadedFiles(JSON.parse(savedFiles));
   }, [username]);
 
-  // Force synchronizing variables directly to disk storage
-  const saveAndSyncSessions = (updatedSessions) => {
-    setSessions(updatedSessions);
-    localStorage.setItem(`dm_sessions_${username}`, JSON.stringify(updatedSessions));
-  };
-
-  // Smooth scroll to tracking anchor
+  /* ── Keyboard shortcuts ── */
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [sessions, activeSessionId, loadingAnswer]);
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); handleNewChat(); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  });
 
-  // Dynamically find and single out the conversation history array matching the clicked link
-  const activeSession = sessions.find(s => s.id === activeSessionId) || { id: '', title: '', history: [], files: [] };
+  /* ── Scroll-to-bottom detection ── */
+  useEffect(() => {
+    const el = messagesRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      setShowScrollBtn(distFromBottom > 200);
+    };
+    el.addEventListener('scroll', onScroll);
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
 
-  const handleCreateNewChat = () => {
-    // Don't clutter the sidebar with multiple blank sessions
-    const hasBlankActive = sessions.some(s => s.history.length === 0);
-    if (hasBlankActive && sessions.length > 0) {
-      const firstBlank = sessions.find(s => s.history.length === 0);
-      setActiveSessionId(firstBlank.id);
-      return;
-    }
+  const scrollToBottom = () => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  useEffect(() => { scrollToBottom(); }, [sessions, activeSessionId, streaming]);
 
-    const newId = 'sess_' + Date.now();
-    const cleanSessions = [{ id: newId, title: 'New Chat Session', history: [], files: [] }, ...sessions];
-    saveAndSyncSessions(cleanSessions);
-    setActiveSessionId(newId);
+  /* ── Persistence helper ── */
+  const saveSessions = useCallback((updated) => {
+    setSessions(updated);
+    localStorage.setItem(`dm_sessions_${username}`, JSON.stringify(updated));
+  }, [username]);
+
+  /* ── Derived state ── */
+  const activeSession = sessions.find(s => s.id === activeSessionId)
+    || { id: '', title: '', history: [], files: [] };
+  const activeFiles = activeSession.files || [];
+
+  /* ── Delete backend vectors ── */
+  const deleteVectors = async (id) => {
+    try { await fetch(`/api/session/${id}`, { method: 'DELETE' }); }
+    catch {}
   };
 
-  const handleDeleteSession = (idToDelete, e) => {
-    e.stopPropagation(); // Stop click from trying to select the chat while deleting it
-    const remaining = sessions.filter(s => s.id !== idToDelete);
-    
-    if (remaining.length === 0) {
-      const newId = 'sess_' + Date.now();
-      saveAndSyncSessions([{ id: newId, title: 'New Chat Session', history: [], files: [] }]);
-      setActiveSessionId(newId);
+  /* ── New chat ── */
+  const handleNewChat = () => {
+    const blank = sessions.find(s => s.history.length === 0 && s.files.length === 0);
+    if (blank) { setActiveId(blank.id); return; }
+    const id = 'sess_' + Date.now();
+    saveSessions([{ id, title: 'New Chat', history: [], files: [] }, ...sessions]);
+    setActiveId(id);
+  };
+
+  /* ── Rename session ── */
+  const handleRenameSession = (id, newTitle) => {
+    saveSessions(sessions.map(s => s.id === id ? { ...s, title: newTitle } : s));
+  };
+
+  /* ── Delete session ── */
+  const handleDeleteSession = (id, e) => {
+    e.stopPropagation();
+    deleteVectors(id);
+    const rest = sessions.filter(s => s.id !== id);
+    if (rest.length === 0) {
+      const nid = 'sess_' + Date.now();
+      saveSessions([{ id: nid, title: 'New Chat', history: [], files: [] }]);
+      setActiveId(nid);
     } else {
-      saveAndSyncSessions(remaining);
-      if (activeSessionId === idToDelete) {
-        setActiveSessionId(remaining[0].id); // Focus on next adjacent chat item
-      }
+      saveSessions(rest);
+      if (activeSessionId === id) setActiveId(rest[0].id);
+    }
+    // Clear summary for deleted session
+    setSummaryMap(prev => { const n = { ...prev }; delete n[id]; return n; });
+  };
+
+  /* ── File upload ── */
+  const handleFileChange = async (e) => {
+    if (!e.target.files?.[0]) return;
+    const files = Array.from(e.target.files);
+    setUploading(true);
+    for (const f of files) {
+      const fd = new FormData();
+      fd.append('file', f);
+      fd.append('session_id', activeSessionId);
+      try {
+        const res  = await fetch('/api/upload', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (res.ok) {
+          setSessions(prev => {
+            const updated = prev.map(s =>
+              s.id === activeSessionId
+                ? { ...s, files: [...new Set([...(s.files || []), f.name])] }
+                : s
+            );
+            localStorage.setItem(`dm_sessions_${username}`, JSON.stringify(updated));
+            return updated;
+          });
+          // Store summary for this session
+          if (data.summary) {
+            setSummaryMap(prev => ({
+              ...prev,
+              [activeSessionId]: {
+                filename: data.filename,
+                summary: data.summary,
+                pages: data.page_count,
+                chunks: data.indexed_chunks,
+              },
+            }));
+          }
+        }
+      } catch (err) { console.error('Upload failed:', err); }
+    }
+    setUploading(false);
+    e.target.value = '';
+  };
+
+  /* ── Drag & drop ── */
+  const handleDragOver  = (e) => { e.preventDefault(); e.stopPropagation(); setDragOver(true); };
+  const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); setDragOver(false); };
+  const handleDrop = (e) => {
+    e.preventDefault(); e.stopPropagation(); setDragOver(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f && (f.type === 'application/pdf' ||
+        f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')) {
+      setSelectedFile(f);
     }
   };
 
-  const handleFileUpload = async (e) => {
-    if (!e.target.files?.[0]) return;
-    const targets = Array.from(e.target.files);
+  /* ── Process document from overlay ── */
+  const handleProcessDocument = async () => {
+    if (!selectedFile || !activeSessionId) return;
     setUploading(true);
-
-    for (const targetFile of targets) {
-      const formData = new FormData();
-      formData.append('file', targetFile);
-      formData.append('session_id', activeSessionId);
-      try {
-        const res = await fetch('/api/upload', { method: 'POST', body: formData });
-        if (res.ok) {
-          const freshFileList = [...new Set([...uploadedFiles, targetFile.name])];
-          setUploadedFiles(freshFileList);
-          localStorage.setItem(`dm_files_${username}`, JSON.stringify(freshFileList));
-          const nextSessions = sessions.map((session) =>
-            session.id === activeSessionId
-              ? { ...session, files: Array.from(new Set([...(session.files || []), targetFile.name])) }
-              : session
+    const fd = new FormData();
+    fd.append('file', selectedFile);
+    fd.append('session_id', activeSessionId);
+    try {
+      const res  = await fetch('/api/upload', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (res.ok) {
+        setSessions(prev => {
+          const updated = prev.map(s =>
+            s.id === activeSessionId
+              ? { ...s, files: [...new Set([...(s.files || []), selectedFile.name])] }
+              : s
           );
-          saveAndSyncSessions(nextSessions);
+          localStorage.setItem(`dm_sessions_${username}`, JSON.stringify(updated));
+          return updated;
+        });
+        if (data.summary) {
+          setSummaryMap(prev => ({
+            ...prev,
+            [activeSessionId]: { filename: data.filename, summary: data.summary, pages: data.page_count, chunks: data.indexed_chunks },
+          }));
         }
-      } catch (err) {
-        console.error("Payload transmission mismatch.", err);
+        setSelectedFile(null);
       }
-    }
+    } catch (err) { console.error('Processing failed:', err); }
     setUploading(false);
   };
 
-  // Drag & Drop Handlers for Premium Upload Interface
-  const handleDragOver = (e) => {
+  /* ── Streaming chat submit ── */
+  const handleChatSubmit = async (e) => {
     e.preventDefault();
-    e.stopPropagation();
-    setDragOver(true);
-  };
-
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(false);
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(false);
-    const files = e.dataTransfer.files;
-    if (files && files.length > 0) {
-      const file = files[0];
-      if (file.type === 'application/pdf' || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-        setSelectedFile(file);
-      }
-    }
-  };
-
-  const handleProcessDocument = async () => {
-    if (selectedFile && activeSessionId) {
-      setUploading(true);
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-      formData.append('session_id', activeSessionId);
-      try {
-        const res = await fetch('/api/upload', { method: 'POST', body: formData });
-        if (res.ok) {
-          const freshFileList = [...new Set([...uploadedFiles, selectedFile.name])];
-          setUploadedFiles(freshFileList);
-          localStorage.setItem(`dm_files_${username}`, JSON.stringify(freshFileList));
-          const nextSessions = sessions.map((session) =>
-            session.id === activeSessionId
-              ? { ...session, files: Array.from(new Set([...(session.files || []), selectedFile.name])) }
-              : session
-          );
-          saveAndSyncSessions(nextSessions);
-          setSelectedFile(null);
-        }
-      } catch (err) {
-        console.error("Document processing failed.", err);
-      }
-      setUploading(false);
-    }
-  };
-
-  const handleChatSubmission = async (e) => {
-    e.preventDefault();
-    if (!question.trim()) return;
+    if (!question.trim() || streaming) return;
 
     const userPrompt = question;
     setQuestion('');
-    setLoadingAnswer(true);
+    setStreaming(true);
 
-    // 1. Instantly append user's prompt bubble to the current active session
-    const updatedHistory = [...activeSession.history, { role: 'user', text: userPrompt }];
-    
-    const updatedSessions = sessions.map(s => {
-      if (s.id === activeSessionId) {
-        // Dynamic Naming: Switch title from 'New Chat Session' to the actual text of your first query
-        const updatedTitle = s.title === 'New Chat Session' ? (userPrompt.length > 22 ? userPrompt.slice(0, 22) + '...' : userPrompt) : s.title;
-        return { ...s, title: updatedTitle, history: updatedHistory };
-      }
-      return s;
+    // Snapshot history for conversation memory (last 6 messages)
+    const historyForApi = activeSession.history.slice(-6).map(m => ({ role: m.role, text: m.text }));
+
+    // Optimistically add user message
+    const userMsg = { role: 'user', text: userPrompt };
+    setSessions(prev => {
+      const updated = prev.map(s => {
+        if (s.id !== activeSessionId) return s;
+        const title = s.title === 'New Chat'
+          ? (userPrompt.length > 26 ? userPrompt.slice(0, 26) + '…' : userPrompt)
+          : s.title;
+        return { ...s, title, history: [...s.history, userMsg] };
+      });
+      localStorage.setItem(`dm_sessions_${username}`, JSON.stringify(updated));
+      return updated;
     });
-    
-    saveAndSyncSessions(updatedSessions);
+
+    // Add a placeholder AI message that will be streamed into
+    const aiPlaceholder = { role: 'assistant', text: '', citations: [], streaming: true };
+    setSessions(prev => {
+      const updated = prev.map(s =>
+        s.id === activeSessionId ? { ...s, history: [...s.history, aiPlaceholder] } : s
+      );
+      localStorage.setItem(`dm_sessions_${username}`, JSON.stringify(updated));
+      return updated;
+    });
 
     try {
-      const res = await fetch('/api/chat', {
+      const res = await fetch('/api/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: userPrompt, session_id: activeSessionId }),
+        body: JSON.stringify({
+          question: userPrompt,
+          session_id: activeSessionId,
+          history: historyForApi,
+        }),
       });
-      const data = await res.json();
-      
-      if (res.ok) {
-        // 2. Append AI model response bubble to this specific session trail
-        const completeHistory = [...updatedHistory, { role: 'assistant', text: data.answer, citations: data.citations }];
-        const syncModelSessions = sessions.map(s => s.id === activeSessionId ? { ...s, history: completeHistory } : s);
-        saveAndSyncSessions(syncModelSessions);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoadingAnswer(false);
-    }
-  };
 
-  // Advanced Markdown parsing with smart keyword detection
-  const TECHNICAL_KEYWORDS = [
-    'Machine Learning', 'ML', 'Deep Learning', 'Neural Network', 'NLP', 'LLM', 'RAG',
-    'Vector', 'Embedding', 'Semantic', 'Retrieval', 'Augmented', 'Generation',
-    'FastAPI', 'Docker', 'Python', 'JavaScript', 'React', 'Node.js', 'PostgreSQL',
-    'MongoDB', 'Redis', 'AWS', 'GCP', 'Azure', 'Kubernetes', 'Microservices',
-    'REST API', 'GraphQL', 'WebSocket', 'OAuth', 'JWT', 'HTTPS',
-    'Retail', 'Analytics', 'Dashboard', 'Platform', 'E-commerce', 'Inventory',
-    'OCR', 'Document', 'PDF', 'Parsing', 'Extraction', 'Classification',
-    'RoBERTa', 'BERT', 'GPT', 'Transformer', 'Attention', 'Tokenization',
-    'Database', 'Cache', 'Queue', 'Message Broker', 'Stream', 'Pipeline',
-    'Optimization', 'Performance', 'Scalability', 'Reliability', 'Latency',
-    'API', 'Endpoint', 'Authentication', 'Authorization', 'Permission',
-    'Framework', 'Library', 'Package', 'Dependency', 'Module', 'Component',
-  ];
-
-  const smartHighlightText = (text) => {
-    if (!text) return text;
-    
-    let result = text;
-    for (const keyword of TECHNICAL_KEYWORDS) {
-      const regex = new RegExp(`\\b(${keyword})\\b`, 'gi');
-      result = result.replace(regex, `**$1**`);
-    }
-    return result;
-  };
-
-  const formatMarkdownText = (rawText) => {
-    if (!rawText) return '';
-
-    const lines = rawText.split('\n');
-    const elements = [];
-    let i = 0;
-
-    while (i < lines.length) {
-      const line = lines[i];
-      const trimmed = line.trim();
-
-      if (!trimmed) {
-        elements.push(<div key={`empty-${i}`} style={{ height: '8px' }} />);
-        i++;
-        continue;
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
       }
 
-      // Parse headers (###, ##, #)
-      if (trimmed.startsWith('###')) {
-        const headerText = trimmed.replace(/^###\s*/, '').trim();
-        elements.push(
-          <h4
-            key={`h4-${i}`}
-            style={{
-              fontSize: 'clamp(13px, 2vw, 15px)',
-              fontWeight: '700',
-              color: '#00f0ff',
-              marginTop: '16px',
-              marginBottom: '12px',
-              letterSpacing: '0.3px',
-              textTransform: 'capitalize',
-            }}
-          >
-            {headerText}
-          </h4>
-        );
-        i++;
-        continue;
-      }
+      const reader  = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer    = '';
+      let citations = [];
 
-      if (trimmed.startsWith('##')) {
-        const headerText = trimmed.replace(/^##\s*/, '').trim();
-        elements.push(
-          <h3
-            key={`h3-${i}`}
-            style={{
-              fontSize: 'clamp(14px, 2.2vw, 16px)',
-              fontWeight: '800',
-              color: '#0e74fd',
-              marginTop: '18px',
-              marginBottom: '14px',
-              letterSpacing: '0.4px',
-            }}
-          >
-            {headerText}
-          </h3>
-        );
-        i++;
-        continue;
-      }
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      if (trimmed.startsWith('#') && !trimmed.startsWith('###')) {
-        const headerText = trimmed.replace(/^#\s*/, '').trim();
-        elements.push(
-          <h2
-            key={`h2-${i}`}
-            style={{
-              fontSize: 'clamp(15px, 2.5vw, 18px)',
-              fontWeight: '800',
-              background: 'linear-gradient(to right, #0e74fd, #00f0ff)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              marginTop: '20px',
-              marginBottom: '16px',
-              letterSpacing: '0.5px',
-            }}
-          >
-            {headerText}
-          </h2>
-        );
-        i++;
-        continue;
-      }
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';   // keep incomplete line
 
-      // Parse numbered lists (1., 2., etc.)
-      if (/^\d+\.\s/.test(trimmed)) {
-        const match = trimmed.match(/^\d+\.\s(.+)$/);
-        if (match) {
-          const content = smartHighlightText(match[1]);
-          const parts = content.split(/\*\*([\s\S]*?)\*\*/g);
-          elements.push(
-            <div
-              key={`ol-${i}`}
-              style={{
-                marginBottom: '10px',
-                paddingLeft: '28px',
-                color: '#e2e8f0',
-                fontSize: 'clamp(13px, 2vw, 15px)',
-                lineHeight: '1.75',
-                letterSpacing: '0.15px',
-                display: 'list-item',
-                listStyleType: 'decimal',
-                listStylePosition: 'outside',
-              }}
-            >
-              {parts.map((part, idx) =>
-                idx % 2 === 1 ? (
-                  <span
-                    key={idx}
-                    style={{
-                      background: 'linear-gradient(to right, #00f0ff, #38bdf8)',
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                      fontWeight: '700',
-                      letterSpacing: '0.3px',
-                    }}
-                  >
-                    {part}
-                  </span>
-                ) : (
-                  <span key={idx}>{part}</span>
-                )
-              )}
-            </div>
-          );
-          i++;
-          continue;
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (!raw) continue;
+
+          let event;
+          try { event = JSON.parse(raw); } catch { continue; }
+
+          if (event.type === 'meta') {
+            citations = event.citations || [];
+          } else if (event.type === 'token') {
+            setSessions(prev => {
+              const updated = prev.map(s => {
+                if (s.id !== activeSessionId) return s;
+                const history = [...s.history];
+                const last = history[history.length - 1];
+                if (last && last.streaming) {
+                  history[history.length - 1] = { ...last, text: last.text + event.content, citations };
+                }
+                return { ...s, history };
+              });
+              localStorage.setItem(`dm_sessions_${username}`, JSON.stringify(updated));
+              return updated;
+            });
+          } else if (event.type === 'done' || event.type === 'error') {
+            setSessions(prev => {
+              const updated = prev.map(s => {
+                if (s.id !== activeSessionId) return s;
+                const history = [...s.history];
+                const last = history[history.length - 1];
+                if (last && last.streaming) {
+                  const finalText = event.type === 'error'
+                    ? `⚠️ Stream error: ${event.message}`
+                    : last.text;
+                  history[history.length - 1] = { ...last, text: finalText, citations, streaming: false };
+                }
+                return { ...s, history };
+              });
+              localStorage.setItem(`dm_sessions_${username}`, JSON.stringify(updated));
+              return updated;
+            });
+          }
         }
       }
-
-      // Parse bullet points (*)
-      if (trimmed.startsWith('*')) {
-        const content = smartHighlightText(trimmed.replace(/^\*\s*/, ''));
-        const parts = content.split(/\*\*([\s\S]*?)\*\*/g);
-        elements.push(
-          <div
-            key={`li-${i}`}
-            style={{
-              marginBottom: '10px',
-              paddingLeft: '24px',
-              color: '#e2e8f0',
-              fontSize: 'clamp(13px, 2vw, 15px)',
-              lineHeight: '1.75',
-              letterSpacing: '0.15px',
-              display: 'list-item',
-              listStyleType: 'disc',
-              listStylePosition: 'outside',
-            }}
-          >
-            {parts.map((part, idx) =>
-              idx % 2 === 1 ? (
-                <span
-                  key={idx}
-                  style={{
-                    background: 'linear-gradient(to right, #00f0ff, #38bdf8)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    fontWeight: '700',
-                    letterSpacing: '0.3px',
-                  }}
-                >
-                  {part}
-                </span>
-              ) : (
-                <span key={idx}>{part}</span>
-              )
-            )}
-          </div>
-        );
-        i++;
-        continue;
-      }
-
-      // Parse regular paragraphs with smart keyword highlighting
-      const enhancedLine = smartHighlightText(trimmed);
-      const parts = enhancedLine.split(/\*\*([\s\S]*?)\*\*/g);
-      elements.push(
-        <p
-          key={`p-${i}`}
-          style={{
-            marginBottom: '14px',
-            color: '#e2e8f0',
-            fontSize: 'clamp(13px, 2vw, 15px)',
-            lineHeight: '1.75',
-            letterSpacing: '0.15px',
-            margin: '0 0 14px 0',
-          }}
-        >
-          {parts.map((part, idx) =>
-            idx % 2 === 1 ? (
-              <span
-                key={idx}
-                style={{
-                  background: 'linear-gradient(to right, #00f0ff, #38bdf8)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  fontWeight: '700',
-                  letterSpacing: '0.3px',
-                }}
-              >
-                {part}
-              </span>
-            ) : (
-              <span key={idx}>{part}</span>
-            )
-          )}
-        </p>
-      );
-      i++;
+    } catch (err) {
+      console.error('Stream error:', err);
+      setSessions(prev => {
+        const updated = prev.map(s => {
+          if (s.id !== activeSessionId) return s;
+          const history = [...s.history];
+          const last = history[history.length - 1];
+          if (last && last.streaming) {
+            history[history.length - 1] = {
+              ...last,
+              text: '⚠️ Could not reach backend. Make sure the FastAPI server is running.',
+              citations: [], streaming: false,
+            };
+          }
+          return { ...s, history };
+        });
+        localStorage.setItem(`dm_sessions_${username}`, JSON.stringify(updated));
+        return updated;
+      });
+    } finally {
+      setStreaming(false);
     }
-
-    return <div style={{ display: 'flex', flexDirection: 'column', gap: '0px' }}>{elements}</div>;
   };
 
-  return (
-    <div style={{ display: 'flex', height: '100vh', width: '100vw', backgroundColor: '#030712', color: '#f8fafc', fontFamily: 'system-ui, -apple-system, sans-serif', margin: 0, padding: 0, boxSizing: 'border-box', overflow: 'hidden' }}>
-      
-      {/* SIDEBAR SYSTEM (CHATGPT LAYOUT) */}
-      <div style={{ width: '280px', minWidth: '280px', borderRight: '1px solid rgba(255, 255, 255, 0.05)', backgroundColor: '#0b0f19', padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxSizing: 'border-box', zIndex: 10 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', height: 'calc(100% - 60px)' }}>
-          
-          {/* NEW CHAT CONSOLE BUTTON */}
-          <button onClick={handleCreateNewChat} style={{ width: '100%', height: '44px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'transparent', color: '#fff', fontWeight: '600', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', transition: 'all 0.2s' }} className="new-chat-btn">
-            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><MessageSquare style={{ width: '16px', color: '#38bdf8' }} /> New Chat</span>
-            <Plus style={{ width: '16px', color: '#64748b' }} />
-          </button>
+  const activeSummary = summaryMap[activeSessionId];
 
-          {/* PERSISTENT SIDEBAR RECENT CHAT SESSION LINKS */}
-          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <span style={{ fontSize: '11px', fontWeight: '700', color: '#475569', letterSpacing: '0.5px', paddingLeft: '8px', textTransform: 'uppercase', marginBottom: '6px' }}>Chat History</span>
-            
+  /* ═══════════════════════════════ RENDER ═══════════════════════════════ */
+  return (
+    <div className="workspace-layout" style={{ position: 'relative' }}>
+
+      {/* ── SIDEBAR ── */}
+      <aside className="workspace-sidebar" style={{
+        width: sidebarOpen ? 268 : 0,
+        minWidth: sidebarOpen ? 268 : 0,
+        overflow: 'hidden',
+        transition: 'width 0.3s var(--ease-spring), min-width 0.3s var(--ease-spring)',
+      }}>
+        <div style={{ width: 268, display: 'flex', flexDirection: 'column', height: '100%' }}>
+          {/* Brand + collapse button */}
+          <div className="sidebar-header">
+            <div className="sidebar-brand">
+              <svg width="26" height="26" viewBox="0 0 28 28" fill="none">
+                <rect width="28" height="28" rx="8" fill="url(#sbG)" />
+                <path d="M14 6L7 9.5V15.5C7 19.09 10.13 22.5 14 23C17.87 22.5 21 19.09 21 15.5V9.5L14 6Z" fill="white" fillOpacity="0.9" />
+                <defs><linearGradient id="sbG" x1="0" y1="0" x2="28" y2="28" gradientUnits="userSpaceOnUse"><stop stopColor="#2563eb" /><stop offset="1" stopColor="#06b6d4" /></linearGradient></defs>
+              </svg>
+              <span className="sidebar-brand-name">Docu<span>Mind</span></span>
+            </div>
+            <button onClick={() => setSidebarOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4, borderRadius: 6, display: 'flex' }}>
+              <ChevronLeft size={16} />
+            </button>
+          </div>
+
+          {/* Session list */}
+          <div className="sidebar-content">
+            <button className="new-chat-btn" onClick={handleNewChat} title="New chat (Ctrl+K)">
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <MessageSquare size={15} color="var(--brand-accent)" />New Chat
+              </span>
+              <Plus size={15} color="var(--text-muted)" />
+            </button>
+
+            <span className="sidebar-section-label">Chat History</span>
+
             {sessions.map(sess => (
-              <div 
-                key={sess.id} 
-                onClick={() => setActiveSessionId(sess.id)} 
-                style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'space-between', 
-                  padding: '0 12px', 
-                  height: '40px', 
-                  borderRadius: '8px', 
-                  cursor: 'pointer', 
-                  backgroundColor: sess.id === activeSessionId ? 'rgba(255,255,255,0.05)' : 'transparent', 
-                  border: sess.id === activeSessionId ? '1px solid rgba(255,255,255,0.08)' : '1px solid transparent',
-                  transition: 'background-color 0.15s'
-                }} 
-                className="session-row"
+              <div key={sess.id} onClick={() => setActiveId(sess.id)}
+                className={`session-item ${sess.id === activeSessionId ? 'active' : ''}`}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
-                  <MessageSquare style={{ width: '14px', color: sess.id === activeSessionId ? '#38bdf8' : '#475569', flexShrink: 0 }} />
-                  <span style={{ fontSize: '13.5px', color: sess.id === activeSessionId ? '#fff' : '#94a3b8', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '160px' }}>
-                    {sess.title}
-                  </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden', flex: 1, minWidth: 0 }}>
+                  <MessageSquare size={13} color={sess.id === activeSessionId ? 'var(--brand-accent)' : 'var(--text-muted)'} style={{ flexShrink: 0 }} />
+                  <SessionTitle
+                    title={sess.title}
+                    onRename={(t) => handleRenameSession(sess.id, t)}
+                  />
                 </div>
-                <Trash2 onClick={(e) => handleDeleteSession(sess.id, e)} style={{ width: '14px', color: '#64748b', opacity: sess.id === activeSessionId ? 1 : 0, transition: 'opacity 0.15s' }} className="trash-icon" />
+                <button className="session-delete-btn" onClick={(e) => handleDeleteSession(sess.id, e)} title="Delete">
+                  <Trash2 size={13} />
+                </button>
               </div>
             ))}
           </div>
 
-          {/* MULTI-DOCUMENT KNOWLEDGE FILE POOL */}
-          <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <button 
-              onClick={() => document.getElementById('premium-upload-trigger')?.click()}
-              style={{ width: '100%', height: '40px', borderRadius: '10px', border: '1px solid rgba(0, 240, 255, 0.3)', backgroundColor: 'rgba(0, 240, 255, 0.08)', color: '#00f0ff', fontWeight: '600', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.2s' }}
-            >
-              <Upload style={{ width: '14px' }} />
-              Upload Document
+          {/* File panel */}
+          <div style={{ padding: '12px 10px', borderTop: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+            <button className="upload-btn-sidebar" onClick={() => document.getElementById('sb-upload')?.click()}>
+              <Upload size={13} />
+              {uploading ? 'Uploading…' : 'Upload to This Chat'}
             </button>
-            
-            {uploadedFiles.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span style={{ fontSize: '10px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Session Files</span>
-                <div style={{ maxHeight: '100px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  {uploadedFiles.map((fName, idx) => (
-                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 6px', borderRadius: '4px', backgroundColor: 'rgba(255,255,255,0.02)', fontSize: '11px', color: '#94a3b8' }}>
-                      <FileText style={{ width: '10px', flexShrink: 0 }} />
-                      <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{fName}</span>
+            <input id="sb-upload" type="file" accept=".pdf,.docx" onChange={handleFileChange} style={{ display: 'none' }} multiple />
+
+            {activeFiles.length > 0 ? (
+              <div style={{ marginTop: 10 }}>
+                <span className="sidebar-section-label" style={{ paddingLeft: 0 }}>This Chat's Files</span>
+                <div className="sidebar-files-list" style={{ marginTop: 4 }}>
+                  {activeFiles.map((name, i) => (
+                    <div key={i} className="file-item">
+                      <FileText size={10} style={{ flexShrink: 0, color: 'var(--brand-accent)' }} />
+                      <span title={name}>{name}</span>
                     </div>
                   ))}
                 </div>
               </div>
+            ) : (
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', marginTop: 8, lineHeight: 1.55 }}>
+                No files yet.<br />Upload a PDF or DOCX above.
+              </p>
             )}
           </div>
-        </div>
 
-        {/* SIDEBAR FOOTER */}
-        <div style={{ height: '50px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px' }}>
-          <span style={{ fontSize: '12px', color: '#475569', fontFamily: 'monospace' }}>@{username}</span>
-          <button onClick={() => { localStorage.clear(); navigate('/'); }} style={{ border: 'none', backgroundColor: 'transparent', color: '#ef4444', cursor: 'pointer' }}><LogOut style={{ width: '16px' }} /></button>
-        </div>
-      </div>
-
-      {/* CHAT BOX CONTAINER DISPLAY (PREMIUM HYPER-DYNAMIC WORKSPACE) */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'radial-gradient(ellipse at 60% 40%, rgba(14, 116, 253, 0.03) 0%, #05070f 80%)', position: 'relative', overflow: 'hidden' }}>
-        
-        {/* PREMIUM DOCUMENT UPLOAD INTERFACE */}
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: selectedFile ? 'rgba(5, 7, 15, 0.95)' : 'transparent', backdropFilter: selectedFile ? 'blur(8px)' : 'none', zIndex: selectedFile ? 9 : -1, transition: 'all 0.3s ease', pointerEvents: selectedFile ? 'auto' : 'none', flexDirection: 'column', padding: '40px 20px' }}>
-          <div style={{ width: '100%', maxWidth: '600px', display: 'flex', flexDirection: 'column', gap: '24px', animation: selectedFile ? 'fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)' : 'none' }}>
-            {/* Header Branding Block */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '12px', background: 'linear-gradient(135deg, rgba(14, 116, 253, 0.15) 0%, rgba(0, 240, 255, 0.1) 100%)', border: '1px solid rgba(14, 116, 253, 0.2)' }}>
-                <Shield style={{ width: '20px', height: '20px', color: '#00f0ff' }} />
-              </div>
-              <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#ffffff', margin: 0, letterSpacing: '-0.5px' }}>DocuMind</h1>
-              <span style={{ fontSize: '11px', fontWeight: '800', color: '#38bdf8', backgroundColor: 'rgba(56, 189, 248, 0.1)', paddingLeft: '8px', paddingRight: '8px', paddingTop: '4px', paddingBottom: '4px', borderRadius: '6px', border: '1px solid rgba(56, 189, 248, 0.2)', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Local</span>
-            </div>
-
-            {/* Description Subtitle */}
-            <p style={{ fontSize: '13px', color: '#94a3b8', textAlign: 'center', margin: 0, lineHeight: '1.6', letterSpacing: '0.2px' }}>
-              Upload PDF or DOCX files to run document structure chunk searches completely offline on your device machine layers.
-            </p>
-
-            {/* Drag & Drop Card */}
-            <div
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              style={{
-                padding: '60px 40px',
-                borderRadius: '16px',
-                backgroundColor: '#0d1527',
-                border: `2px dashed ${dragOver ? 'rgba(0, 240, 255, 0.5)' : 'rgba(255, 255, 255, 0.15)'}`,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '16px',
-                cursor: 'pointer',
-                transition: 'all 0.3s ease',
-                backgroundColor: dragOver ? 'rgba(14, 116, 253, 0.08)' : '#0d1527',
-              }}
-            >
-              <Upload style={{ width: '40px', height: '40px', color: '#94a3b8', strokeWidth: 1.5 }} />
-              <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <p style={{ fontSize: '15px', fontWeight: '600', color: '#ffffff', margin: 0, letterSpacing: '0.3px' }}>
-                  {selectedFile ? selectedFile.name : 'Drag your file here or click to browse'}
-                </p>
-                <span style={{ fontSize: '12px', color: '#475569', margin: 0 }}>PDF or DOCX up to 25MB</span>
-              </div>
-              <input
-                id="premium-upload-trigger"
-                type="file"
-                accept=".pdf,.docx"
-                onChange={(e) => {
-                  if (e.target.files && e.target.files.length > 0) {
-                    setSelectedFile(e.target.files[0]);
-                  }
-                }}
-                style={{ display: 'none' }}
-              />
-            </div>
-
-            {/* Action Processing Button */}
-            <button
-              onClick={() => {
-                if (!selectedFile) {
-                  document.getElementById('premium-upload-trigger')?.click();
-                } else {
-                  handleProcessDocument();
-                }
-              }}
-              disabled={uploading}
-              style={{
-                width: '100%',
-                padding: '16px 20px',
-                borderRadius: '12px',
-                border: 'none',
-                backgroundColor: uploading ? '#64748b' : '#38bdf8',
-                color: uploading ? '#a1a5a8' : '#030712',
-                fontWeight: '700',
-                fontSize: '14px',
-                cursor: uploading ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '10px',
-                transition: 'all 0.2s ease',
-                opacity: uploading ? 0.7 : 1,
-              }}
-              onMouseEnter={(e) => {
-                if (!uploading) {
-                  e.target.style.transform = 'translateY(-2px)';
-                  e.target.style.boxShadow = '0 8px 24px rgba(56, 189, 248, 0.3)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.transform = 'translateY(0)';
-                e.target.style.boxShadow = 'none';
-              }}
-            >
-              <FileText style={{ width: '16px', height: '16px', strokeWidth: 2.5 }} />
-              {uploading ? 'Processing...' : selectedFile ? 'Process Document' : 'Select File'}
-            </button>
-
-            {/* Close Button */}
-            {selectedFile && (
-              <button
-                onClick={() => setSelectedFile(null)}
-                style={{
-                  width: '100%',
-                  padding: '10px 16px',
-                  borderRadius: '8px',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  backgroundColor: 'transparent',
-                  color: '#94a3b8',
-                  fontWeight: '500',
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
-                  e.target.style.color = '#cbd5e1';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.backgroundColor = 'transparent';
-                  e.target.style.color = '#94a3b8';
-                }}
-              >
-                Cancel
+          {/* Footer */}
+          <div className="sidebar-footer">
+            <span className="sidebar-username">@{username}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {/* Backend status indicator */}
+              {backendOk !== null && (
+                <span title={backendOk ? 'Backend online' : 'Backend offline'} style={{
+                  width: 8, height: 8, borderRadius: '50%',
+                  background: backendOk ? 'var(--success)' : 'var(--error)',
+                  boxShadow: backendOk ? '0 0 6px var(--success)' : '0 0 6px var(--error)',
+                  display: 'inline-block',
+                }} />
+              )}
+              <button className="logout-btn" title="Sign out" onClick={() => { localStorage.clear(); navigate('/'); }}>
+                <LogOut size={16} />
               </button>
-            )}
+            </div>
           </div>
         </div>
-        
-        {/* MESSAGES DISPLAY SCROLL STREAM */}
-        <div style={{ flex: 1, padding: 'clamp(20px 16px, 5vw, 40px 12%)', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '24px', boxSizing: 'border-box' }}>
+      </aside>
+
+      {/* ── Collapsed sidebar toggle ── */}
+      {!sidebarOpen && (
+        <button onClick={() => setSidebarOpen(true)} style={{
+          position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
+          zIndex: 100, background: 'var(--bg-elevated)', border: '1px solid var(--border-default)',
+          borderRadius: 10, width: 32, height: 32, display: 'flex', alignItems: 'center',
+          justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)',
+          boxShadow: 'var(--shadow-md)',
+        }}>
+          <ChevronRight size={16} />
+        </button>
+      )}
+
+      {/* ── MAIN CHAT ── */}
+      <main className="chat-main" style={{ position: 'relative' }}>
+
+        {/* Upload overlay */}
+        {selectedFile && (
+          <div className="upload-overlay">
+            <div className="upload-card">
+              <div className="upload-header">
+                <div style={{ width: 48, height: 48, borderRadius: 14, background: 'linear-gradient(135deg,rgba(37,99,235,.15),rgba(6,182,212,.1))', border: '1px solid rgba(6,182,212,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
+                  <Shield size={22} color="var(--brand-accent)" />
+                </div>
+                <h2>Process Document</h2>
+                <p>Indexed <strong>only</strong> into this session's isolated vector store</p>
+              </div>
+              <div className={`dropzone ${dragOver ? 'drag-over' : ''}`} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onClick={() => document.getElementById('ov-upload')?.click()}>
+                <Upload size={36} color="var(--text-muted)" strokeWidth={1.5} />
+                <p className="dropzone-title">{selectedFile.name}</p>
+                <span className="dropzone-hint">Click to change · PDF or DOCX up to 25 MB</span>
+                <input id="ov-upload" type="file" accept=".pdf,.docx" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) setSelectedFile(e.target.files[0]); }} />
+              </div>
+              <button className="process-btn" onClick={handleProcessDocument} disabled={uploading}>
+                <FileText size={16} />
+                {uploading ? 'Indexing document…' : 'Process & Index Document'}
+              </button>
+              <button className="cancel-btn" onClick={() => setSelectedFile(null)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {/* Drag-over zone */}
+        {!selectedFile && (
+          <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} style={{ position: 'absolute', inset: 0, zIndex: dragOver ? 40 : -1, pointerEvents: dragOver ? 'auto' : 'none' }}>
+            {dragOver && (
+              <div style={{ position: 'absolute', inset: 16, borderRadius: 20, border: '2px dashed var(--brand-accent)', background: 'rgba(6,182,212,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <Upload size={36} color="var(--brand-accent)" strokeWidth={1.5} />
+                  <p style={{ marginTop: 12, fontSize: 15, fontWeight: 600, color: 'var(--brand-accent)' }}>Drop to upload to this chat</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Messages */}
+        <div ref={messagesRef} className="chat-messages">
           {activeSession.history.length === 0 ? (
-            <div style={{ margin: 'auto', textAlign: 'center', maxWidth: '480px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', animation: 'fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '64px', height: '64px', borderRadius: '20px', background: 'linear-gradient(135deg, rgba(14, 116, 253, 0.1) 0%, rgba(0, 240, 255, 0.05) 100%)', border: '1px solid rgba(14, 116, 253, 0.2)', boxShadow: '0 0 20px rgba(0, 240, 255, 0.05)' }}>
-                <Shield style={{ color: '#0e74fd', width: '28px', strokeWidth: 1.5 }} />
+            <div className="chat-welcome">
+              <div className="chat-welcome-icon">
+                <Shield size={28} color="var(--brand-primary)" strokeWidth={1.5} />
               </div>
               <div>
-                <h2 style={{ fontSize: 'clamp(20px, 4vw, 28px)', fontWeight: '800', color: '#f8fafc', margin: '0 0 12px 0', letterSpacing: '-0.8px', background: 'linear-gradient(to right, #f8fafc, #cbd5e1)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Welcome to DocuMind</h2>
-                <p style={{ fontSize: 'clamp(13px, 2.5vw, 15px)', color: '#94a3b8', margin: 0, lineHeight: '1.75', letterSpacing: '0.3px' }}>Upload documents into the active thread, then ask precise questions. Each session keeps its own isolated document vector store.</p>
+                <h2>Welcome to DocuMind</h2>
+                <p style={{ marginTop: 10 }}>
+                  Upload a PDF or DOCX to this chat, then ask questions about it. Each chat
+                  session has its own <strong>isolated</strong> vector store — files from other sessions never interfere.
+                </p>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', width: '100%', marginTop: '16px' }}>
-                <div style={{ padding: '16px', borderRadius: '16px', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(14, 116, 253, 0.2)', backdropFilter: 'blur(10px)' }}>
-                  <p style={{ margin: 0, color: '#00f0ff', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '8px' }}>Thread Isolation</p>
-                  <p style={{ margin: 0, color: '#cbd5e1', fontSize: '13px', lineHeight: '1.6' }}>Each session stores its own documents separately.</p>
+
+              {/* Auto-summary card */}
+              {activeSummary && (
+                <div style={{
+                  width: '100%', padding: '20px 24px', borderRadius: 16,
+                  background: 'linear-gradient(135deg, rgba(37,99,235,0.08) 0%, rgba(6,182,212,0.05) 100%)',
+                  border: '1px solid rgba(37,99,235,0.20)',
+                  textAlign: 'left', animation: 'fadeUp 0.4s var(--ease-spring) both',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <Sparkles size={14} color="var(--brand-accent)" />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--brand-accent)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                      Auto Summary · {activeSummary.filename}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.7, margin: 0 }}>
+                    {activeSummary.summary}
+                  </p>
+                  <div style={{ display: 'flex', gap: 16, marginTop: 12 }}>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>📄 {activeSummary.pages} page{activeSummary.pages !== 1 ? 's' : ''}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>🧩 {activeSummary.chunks} chunks indexed</span>
+                  </div>
                 </div>
-                <div style={{ padding: '16px', borderRadius: '16px', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(14, 116, 253, 0.2)', backdropFilter: 'blur(10px)' }}>
-                  <p style={{ margin: 0, color: '#00f0ff', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '8px' }}>Offline LLM</p>
-                  <p style={{ margin: 0, color: '#cbd5e1', fontSize: '13px', lineHeight: '1.6' }}>Gemma2 runs locally without API calls.</p>
+              )}
+
+              <div className="chat-hint-cards">
+                <div className="chat-hint-card">
+                  <div className="chat-hint-card-label">Session Isolation</div>
+                  <p>Each chat keeps its own files. New Chat starts completely fresh.</p>
+                </div>
+                <div className="chat-hint-card">
+                  <div className="chat-hint-card-label">Conversation Memory</div>
+                  <p>Ask follow-up questions — DocuMind remembers your last 3 turns.</p>
                 </div>
               </div>
+
+              <p style={{ fontSize: 11.5, color: 'var(--text-muted)', letterSpacing: '0.02em' }}>
+                💡 Tip: Press <kbd style={{ padding: '2px 6px', background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 10 }}>Ctrl+K</kbd> for a new chat anytime
+              </p>
             </div>
           ) : (
-            activeSession.history.map((msg, index) => (
-              <div key={index} style={{ display: 'flex', width: '100%', flexDirection: 'column', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start', animation: `fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) ${index * 0.05}s both` }}>
-                <span style={{ fontSize: '9px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.2em' }}>
-                  {msg.role === 'user' ? 'You' : 'DocuMind'}
-                </span>
-                
+            <>
+              {/* Auto-summary banner when history exists */}
+              {activeSummary && (
                 <div style={{
-                  maxWidth: 'min(90%, 720px)',
-                  padding: msg.role === 'user' ? '16px 22px' : '18px 22px',
-                  borderRadius: msg.role === 'user' ? '20px 20px 4px 20px' : '4px 20px 20px 20px',
-                  background: msg.role === 'user'
-                    ? 'rgba(14, 116, 253, 0.12)'
-                    : 'rgba(255, 255, 255, 0.02)',
-                  border: msg.role === 'user'
-                    ? '1px solid rgba(14, 116, 253, 0.3)'
-                    : '1px solid rgba(255, 255, 255, 0.05)',
-                  backdropFilter: msg.role === 'user' ? 'blur(4px)' : 'blur(8px)',
-                  color: '#f1f5f9',
-                  boxShadow: msg.role === 'user'
-                    ? '0 0 12px rgba(14, 116, 253, 0.1)'
-                    : '0 0 16px rgba(0, 240, 255, 0.02)',
+                  padding: '14px 18px', borderRadius: 12, marginBottom: 8,
+                  background: 'rgba(37,99,235,0.06)', border: '1px solid rgba(37,99,235,0.15)',
+                  display: 'flex', alignItems: 'flex-start', gap: 10,
                 }}>
-                  <div style={{ fontSize: 'clamp(13px, 2vw, 15px)', lineHeight: '1.75', letterSpacing: '0.15px', color: msg.role === 'user' ? '#e2e8f0' : '#cbd5e1' }}>
-                    {msg.role === 'user' ? msg.text : formatMarkdownText(msg.text)}
+                  <Sparkles size={14} color="var(--brand-accent)" style={{ marginTop: 2, flexShrink: 0 }} />
+                  <div>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--brand-accent)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                      {activeSummary.filename}
+                    </span>
+                    <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6, margin: '4px 0 0' }}>
+                      {activeSummary.summary}
+                    </p>
                   </div>
-                  
-                  {msg.citations && msg.citations.length > 0 && (
-                    <div style={{ marginTop: '16px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                      {msg.citations.map((cite, cIdx) => (
-                        <span
-                          key={cIdx}
-                          style={{
-                            padding: '6px 12px',
-                            borderRadius: '999px',
-                            border: '1px solid rgba(0, 240, 255, 0.3)',
-                            background: 'rgba(0, 240, 255, 0.05)',
-                            color: '#00f0ff',
-                            fontSize: '11px',
-                            fontWeight: '600',
-                            letterSpacing: '0.05em',
-                            boxShadow: '0 0 8px rgba(0, 240, 255, 0.1)',
-                            backdropFilter: 'blur(4px)',
-                          }}
-                        >
-                          {cite}
-                        </span>
-                      ))}
+                </div>
+              )}
+
+              {activeSession.history.map((msg, idx) => (
+                <div key={idx} className={`msg-row ${msg.role}`}
+                  style={{ animation: `fadeUp 0.3s ${Math.min(idx * 0.03, 0.25)}s var(--ease-spring) both` }}
+                >
+                  <span className="msg-label">{msg.role === 'user' ? 'You' : 'DocuMind'}</span>
+                  <div className={`msg-bubble ${msg.role}`} style={{ position: 'relative' }}>
+                    <div>
+                      {msg.role === 'user'
+                        ? msg.text
+                        : <Markdown raw={msg.text} />
+                      }
+                      {/* Blinking cursor while streaming */}
+                      {msg.streaming && (
+                        <span style={{
+                          display: 'inline-block', width: 2, height: 16,
+                          background: 'var(--brand-accent)', marginLeft: 3,
+                          animation: 'blink 0.7s ease-in-out infinite', verticalAlign: 'middle',
+                        }} />
+                      )}
                     </div>
-                  )}
-                </div>
-              </div>
-            ))
-          )}
-          
-          {loadingAnswer && (
-            <div style={{ display: 'flex', width: '100%', flexDirection: 'column', alignItems: 'flex-start', animation: 'fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)' }}>
-              <span style={{ fontSize: '9px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.2em' }}>DocuMind</span>
-              <div style={{ maxWidth: 'min(90%, 720px)', padding: '18px 22px', borderRadius: '4px 20px 20px 20px', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.05)', backdropFilter: 'blur(8px)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ display: 'flex', gap: '3px' }}>
-                    {[0, 1, 2].map((i) => (
-                      <div
-                        key={i}
-                        style={{
-                          width: '8px',
-                          height: '8px',
-                          borderRadius: '50%',
-                          background: 'linear-gradient(to right, #0e74fd, #00f0ff)',
-                          animation: `pulse 1.4s ease-in-out ${i * 0.15}s infinite`,
-                        }}
-                      />
-                    ))}
+                    {/* Copy button — only on finished AI messages */}
+                    {msg.role === 'assistant' && !msg.streaming && msg.text && (
+                      <CopyButton text={msg.text} />
+                    )}
+                    {msg.citations?.length > 0 && (
+                      <div className="msg-citations">
+                        {msg.citations.map((c, ci) => (
+                          <span key={ci} className="citation-pill">{c}</span>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <span style={{ fontSize: '13px', color: '#94a3b8', fontWeight: '500', letterSpacing: '0.3px' }}>Analyzing vectors...</span>
                 </div>
-                <div style={{ marginTop: '12px', height: '3px', background: 'linear-gradient(to right, rgba(0, 240, 255, 0.2), rgba(14, 116, 253, 0.2), transparent)', borderRadius: '999px', overflow: 'hidden' }}>
-                  <div style={{ width: '40%', height: '100%', background: 'linear-gradient(to right, #0e74fd, #00f0ff)', animation: 'shimmer 1.5s infinite' }} />
-                </div>
-              </div>
-            </div>
+              ))}
+            </>
           )}
           <div ref={chatEndRef} />
         </div>
 
-        {/* PREMIUM FLOATING PROMPT BOARD INPUT */}
-        <div style={{ padding: 'clamp(20px 16px, 3vw, 36px 12%)', background: 'linear-gradient(to top, rgba(5, 7, 15, 0.8), transparent)', backdropFilter: 'blur(8px)' }}>
-          <form onSubmit={handleChatSubmission} style={{ display: 'flex', position: 'relative', alignItems: 'stretch' }}>
+        {/* Scroll to bottom button */}
+        {showScrollBtn && (
+          <button onClick={scrollToBottom} style={{
+            position: 'absolute', bottom: 110, right: 24, zIndex: 20,
+            width: 36, height: 36, borderRadius: '50%',
+            background: 'var(--bg-elevated)', border: '1px solid var(--border-default)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', color: 'var(--text-secondary)',
+            boxShadow: 'var(--shadow-md)', animation: 'fadeUp 0.2s ease both',
+          }}>
+            <ChevronDown size={18} />
+          </button>
+        )}
+
+        {/* Input area */}
+        <div className="chat-input-area">
+          {activeFiles.length === 0 && (
+            <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--warning)', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              ⚠️ No document uploaded to this chat yet — upload a file first.
+            </p>
+          )}
+          <form className="chat-form" onSubmit={handleChatSubmit}>
             <input
+              className="chat-input"
               type="text"
               value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              placeholder="Ask DocuMind about these documents..."
-              disabled={loadingAnswer}
-              style={{
-                flex: 1,
-                padding: 'clamp(14px 16px, 2vw, 18px 20px)',
-                borderRadius: '16px',
-                border: '1px solid rgba(14, 116, 253, 0.2)',
-                background: 'rgba(15, 23, 42, 0.6)',
-                color: '#f8fafc',
-                fontSize: 'clamp(13px, 2vw, 15px)',
-                outline: 'none',
-                backdropFilter: 'blur(8px)',
-                transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-                boxShadow: '0 0 0 0 rgba(0, 240, 255, 0)',
-              }}
-              onFocus={(e) => {
-                e.target.style.boxShadow = '0 0 20px rgba(0, 240, 255, 0.15), inset 0 0 10px rgba(0, 240, 255, 0.05)';
-                e.target.style.borderColor = 'rgba(0, 240, 255, 0.4)';
-                e.target.style.background = 'rgba(15, 23, 42, 0.8)';
-              }}
-              onBlur={(e) => {
-                e.target.style.boxShadow = '0 0 0 0 rgba(0, 240, 255, 0)';
-                e.target.style.borderColor = 'rgba(14, 116, 253, 0.2)';
-                e.target.style.background = 'rgba(15, 23, 42, 0.6)';
-              }}
+              onChange={e => setQuestion(e.target.value)}
+              placeholder={activeFiles.length > 0
+                ? `Ask about ${activeFiles.length === 1 ? activeFiles[0] : `${activeFiles.length} documents`}…`
+                : 'Upload a document first, then ask questions…'
+              }
+              disabled={streaming}
             />
             <button
               type="submit"
-              disabled={loadingAnswer || !question.trim()}
-              style={{
-                marginLeft: '12px',
-                width: 'clamp(42px, 8vw, 52px)',
-                height: 'clamp(42px, 8vw, 52px)',
-                borderRadius: '14px',
-                border: 'none',
-                background: question.trim() && !loadingAnswer
-                  ? 'linear-gradient(135deg, #0e74fd 0%, #00f0ff 100%)'
-                  : 'rgba(255, 255, 255, 0.05)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: loadingAnswer ? 'not-allowed' : 'pointer',
-                transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-                boxShadow: question.trim() && !loadingAnswer ? '0 0 16px rgba(0, 240, 255, 0.2)' : 'none',
-              }}
-              onMouseEnter={(e) => {
-                if (!loadingAnswer && question.trim()) {
-                  e.target.style.transform = 'scale(1.08)';
-                  e.target.style.boxShadow = '0 0 24px rgba(0, 240, 255, 0.3)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.transform = 'scale(1)';
-                e.target.style.boxShadow = '0 0 16px rgba(0, 240, 255, 0.2)';
-              }}
+              disabled={streaming || !question.trim()}
+              className={`chat-send-btn ${question.trim() && !streaming ? 'active' : 'inactive'}`}
             >
-              <Send
-                style={{
-                  width: 'clamp(16px, 4vw, 20px)',
-                  height: 'clamp(16px, 4vw, 20px)',
-                  color: loadingAnswer || !question.trim() ? '#64748b' : '#030712',
-                  transition: 'all 0.3s ease',
-                }}
-              />
+              <Send size={18} color={question.trim() && !streaming ? 'white' : 'var(--text-muted)'} />
             </button>
           </form>
+          <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-muted)', marginTop: 10, letterSpacing: '0.02em' }}>
+            {streaming
+              ? '⚡ DocuMind is generating a response…'
+              : 'Runs 100% locally — your documents never leave this machine.'
+            }
+          </p>
         </div>
-
-      </div>
+      </main>
 
       <style>{`
-        @keyframes fadeUp {
-          from {
-            opacity: 0;
-            transform: translateY(16px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+        @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes fadeIn  { from{opacity:0} to{opacity:1} }
+        @keyframes blink   { 0%,100%{opacity:1} 50%{opacity:0} }
+        @keyframes glow-pulse {
+          0%,100%{box-shadow:0 0 16px rgba(6,182,212,.12)}
+          50%{box-shadow:0 0 32px rgba(6,182,212,.28)}
         }
-
-        @keyframes pulse {
-          0%, 100% {
-            opacity: 0.6;
-            transform: scale(1);
-          }
-          50% {
-            opacity: 1;
-            transform: scale(1.1);
-          }
+        @keyframes float {
+          0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)}
         }
-
-        @keyframes shimmer {
-          0% {
-            background-position: -1000px 0;
-          }
-          100% {
-            background-position: 1000px 0;
-          }
-        }
-
-        @keyframes spin {
-          0% {
-            transform: rotate(0deg);
-          }
-          100% {
-            transform: rotate(360deg);
-          }
-        }
-
-        input::placeholder {
-          color: rgba(148, 163, 184, 0.6);
-          font-style: italic;
-          letter-spacing: 0.2px;
-        }
-
-        input:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        ::-webkit-scrollbar {
-          width: 6px;
-          height: 6px;
-        }
-
-        ::-webkit-scrollbar-track {
-          background: rgba(15, 23, 42, 0.3);
-          border-radius: 999px;
-        }
-
-        ::-webkit-scrollbar-thumb {
-          background: linear-gradient(to right, rgba(14, 116, 253, 0.3), rgba(0, 240, 255, 0.2));
-          border-radius: 999px;
-          transition: all 0.3s ease;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-          background: linear-gradient(to right, rgba(14, 116, 253, 0.5), rgba(0, 240, 255, 0.4));
-        }
-
-        @media (max-width: 768px) {
-          ::-webkit-scrollbar {
-            width: 4px;
-          }
-        }
+        .chat-welcome-icon { animation: glow-pulse 3s ease-in-out infinite, float 4s ease-in-out infinite; }
+        .msg-bubble.assistant { padding-right: 60px; }
       `}</style>
     </div>
   );

@@ -13,8 +13,19 @@ CHROMA_DATA_DIR = os.path.join(
 class VectorStoreService:
     def __init__(self):
         self.embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-        self.parent_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=400)
-        self.child_splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=50)
+
+        # Parent chunks: larger for rich context windows
+        self.parent_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=2000,
+            chunk_overlap=400,
+            separators=["\n\n", "\n", ". ", " ", ""],
+        )
+        # Child chunks: smaller for precise similarity search
+        self.child_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=400,
+            chunk_overlap=80,
+            separators=["\n\n", "\n", ". ", " ", ""],
+        )
         os.makedirs(CHROMA_DATA_DIR, exist_ok=True)
 
     def _get_chroma(self) -> Chroma:
@@ -24,7 +35,7 @@ class VectorStoreService:
         parent_chunks = self.parent_splitter.split_text(text)
         child_documents = []
 
-        for parent_index, parent_text in enumerate(parent_chunks):
+        for parent_text in parent_chunks:
             parent_id = str(uuid.uuid4())
             child_chunks = self.child_splitter.split_text(parent_text)
 
@@ -46,26 +57,32 @@ class VectorStoreService:
         db.persist()
         return len(child_documents)
 
-    def similarity_search_isolated(self, query: str, session_id: str, k: int = 7):
+    def similarity_search_isolated(self, query: str, session_id: str, k: int = 12):
+        """
+        Retrieve the top-k most semantically similar child chunks,
+        then return their full parent contexts (deduped) for richer answers.
+        """
         db = self._get_chroma()
+
+        # Fetch more child hits than k to give deduplication room
+        fetch_k = min(k * 3, 40)
         child_matches = db.similarity_search(
             query,
-            k=k,
+            k=fetch_k,
             filter={"session_id": str(session_id)},
         )
 
         seen_parent_ids = set()
         parent_documents = []
 
-        for child_document in child_matches:
-            metadata = child_document.metadata or {}
-            parent_id = metadata.get("parent_id")
-            parent_context = metadata.get("parent_context")
-            source_name = metadata.get("source", "unknown")
+        for child in child_matches:
+            meta = child.metadata or {}
+            parent_id      = meta.get("parent_id")
+            parent_context = meta.get("parent_context")
+            source_name    = meta.get("source", "unknown")
 
             if not parent_id or not parent_context:
                 continue
-
             if parent_id in seen_parent_ids:
                 continue
 
@@ -80,6 +97,10 @@ class VectorStoreService:
                     },
                 )
             )
+
+            # Stop once we have enough unique parent contexts
+            if len(parent_documents) >= k:
+                break
 
         return parent_documents
 
