@@ -1,0 +1,11 @@
+{
+  "include": [
+    "backend/app"
+  ],
+  "venvPath": "c:/Users/vkund/OneDrive/Desktop/documind/backend",
+  "venv": "env",
+  "pythonVersion": "3.14",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": "warning",
+  "reportMissingModuleSource": "none"
+}

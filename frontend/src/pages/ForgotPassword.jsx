@@ -7,9 +7,28 @@ export default function ForgotPassword() {
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
-  const handleReset = (e) => {
+  const [error, setError] = useState('');
+
+  const handleReset = async (e) => {
     e.preventDefault();
-    if (email) setSubmitted(true);
+    if (!email) return;
+    
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.detail || 'Something went wrong');
+      }
+      
+      setSubmitted(true);
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
   return (
@@ -27,6 +46,7 @@ export default function ForgotPassword() {
             </div>
 
             <form className="auth-form" onSubmit={handleReset}>
+              {error && <div className="auth-error-banner" style={{ background: 'rgba(244,63,94,0.1)', color: 'var(--brand-accent)', padding: '10px 14px', borderRadius: '8px', marginBottom: '20px', fontSize: '13px', border: '1px solid rgba(244,63,94,0.2)' }}>{error}</div>}
               <div className="form-group">
                 <label className="form-label">Email Address</label>
                 <div className="input-field">
@@ -35,7 +55,10 @@ export default function ForgotPassword() {
                     type="email"
                     required
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setError('');
+                    }}
                     placeholder="name@company.com"
                   />
                 </div>

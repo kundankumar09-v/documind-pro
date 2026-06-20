@@ -1,0 +1,19 @@
+{
+  "python.defaultInterpreterPath": "c:/Users/vkund/OneDrive/Desktop/documind/backend/env/Scripts/python.exe",
+  "python.pythonPath": "c:/Users/vkund/OneDrive/Desktop/documind/backend/env/Scripts/python.exe",
+  "python.analysis.extraPaths": [
+    "c:/Users/vkund/OneDrive/Desktop/documind/backend/env/Lib/site-packages"
+  ],
+  "python.analysis.venvPath": "c:/Users/vkund/OneDrive/Desktop/documind/backend",
+  "python.analysis.venv": "env",
+  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.reportMissingImports": "warning",
+  "python.analysis.reportMissingModuleSource": "none",
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.autopep8"
+  },
+  "python.analysis.ignore": [
+    "**/node_modules/**",
+    "**/frontend/**"
+  ]
+}

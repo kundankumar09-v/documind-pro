@@ -7,7 +7,7 @@ pypdf==4.2.0
 python-docx==1.1.2
 python-multipart==0.0.9
 PyJWT
-passlib[bcrypt]
+bcrypt
 pymupdf
 langchain
 langchain-community
@@ -16,3 +16,6 @@ langchain-ollama
 langchain-huggingface
 sentence-transformers
 chromadb
+sqlalchemy
+openpyxl
+python-pptx

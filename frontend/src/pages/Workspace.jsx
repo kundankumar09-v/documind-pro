@@ -1,11 +1,57 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   Upload, MessageSquare, Shield, Send, LogOut,
   FileText, Plus, Trash2, Copy, Check,
   ChevronLeft, ChevronRight, ChevronDown,
-  Pencil, X, Sparkles,
+  Pencil, X, Sparkles, Brain,
 } from 'lucide-react';
+
+/* ─── Supported formats config ─── */
+const SUPPORTED_ACCEPT = '.pdf,.docx,.xlsx,.xls,.csv,.txt,.md,.pptx,.ipynb';
+const SUPPORTED_MIMES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  'text/csv',
+  'text/plain',
+  'text/markdown',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/json', // .ipynb
+];
+
+/* Map extension → badge color */
+const EXT_COLORS = {
+  pdf:   { bg: 'rgba(244,63,94,0.12)',  border: 'rgba(244,63,94,0.30)',  color: '#f87171' },
+  docx:  { bg: 'rgba(37,99,235,0.12)',  border: 'rgba(37,99,235,0.30)',  color: '#60a5fa' },
+  xlsx:  { bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.30)', color: '#34d399' },
+  xls:   { bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.30)', color: '#34d399' },
+  csv:   { bg: 'rgba(6,182,212,0.12)',  border: 'rgba(6,182,212,0.30)',  color: '#22d3ee' },
+  txt:   { bg: 'rgba(168,85,247,0.12)', border: 'rgba(168,85,247,0.30)', color: '#c084fc' },
+  md:    { bg: 'rgba(168,85,247,0.12)', border: 'rgba(168,85,247,0.30)', color: '#c084fc' },
+  pptx:  { bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.30)', color: '#fbbf24' },
+  ipynb: { bg: 'rgba(245,158,11,0.14)', border: 'rgba(245,158,11,0.35)', color: '#f59e0b' },
+};
+
+function getExt(filename) {
+  return (filename || '').rsplit ? filename.rsplit('.', 1)[1]?.toLowerCase() : filename?.split('.').pop()?.toLowerCase();
+}
+
+function FileBadge({ filename }) {
+  const ext = (filename || '').split('.').pop()?.toLowerCase();
+  const style = EXT_COLORS[ext] || { bg: 'rgba(124,58,237,0.10)', border: 'rgba(124,58,237,0.25)', color: '#a855f7' };
+  return (
+    <span style={{
+      fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
+      textTransform: 'uppercase', letterSpacing: '0.05em',
+      background: style.bg, border: `1px solid ${style.border}`, color: style.color,
+      flexShrink: 0, marginLeft: 'auto',
+    }}>
+      {ext}
+    </span>
+  );
+}
 
 /* ─── Markdown renderer ─────────────────────────────────────────────────────── */
 const TECH_KW = [
@@ -25,7 +71,7 @@ function Inline({ text }) {
   const parts = hi(text).split(/\*\*([\s\S]*?)\*\*/g);
   return parts.map((p, i) =>
     i % 2 === 1
-      ? <strong key={i} style={{ background: 'linear-gradient(90deg,#2563eb,#06b6d4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>{p}</strong>
+      ? <strong key={i} style={{ background: 'linear-gradient(90deg,#7c3aed,#f43f5e)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>{p}</strong>
       : <span key={i}>{p}</span>
   );
 }
@@ -36,9 +82,20 @@ function Markdown({ raw }) {
       {raw.split('\n').map((line, i) => {
         const t = line.trim();
         if (!t) return <div key={i} style={{ height: 8 }} />;
-        if (t.startsWith('### ')) return <h4 key={i} style={{ fontSize: 13.5, fontWeight: 700, color: '#06b6d4', margin: '14px 0 8px', letterSpacing: '0.02em' }}>{t.slice(4)}</h4>;
-        if (t.startsWith('## '))  return <h3 key={i} style={{ fontSize: 15, fontWeight: 800, color: '#93c5fd', margin: '16px 0 10px' }}>{t.slice(3)}</h3>;
-        if (t.startsWith('# '))   return <h2 key={i} style={{ fontSize: 17, fontWeight: 800, background: 'linear-gradient(90deg,#2563eb,#06b6d4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', margin: '18px 0 12px' }}>{t.slice(2)}</h2>;
+        
+        // Match image markdown: ![alt](url)
+        const imgMatch = t.match(/^!\[(.*?)\]\((.*?)\)$/);
+        if (imgMatch) {
+          return (
+            <div key={i} style={{ margin: '16px 0', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-default)' }}>
+              <img src={imgMatch[2]} alt={imgMatch[1]} style={{ maxWidth: '100%', display: 'block', maxHeight: '400px', objectFit: 'contain', background: 'var(--bg-elevated)' }} />
+            </div>
+          );
+        }
+
+        if (t.startsWith('### ')) return <h4 key={i} style={{ fontSize: 13.5, fontWeight: 700, color: '#a855f7', margin: '14px 0 8px', letterSpacing: '0.02em' }}>{t.slice(4)}</h4>;
+        if (t.startsWith('## '))  return <h3 key={i} style={{ fontSize: 15, fontWeight: 800, color: '#c084fc', margin: '16px 0 10px' }}>{t.slice(3)}</h3>;
+        if (t.startsWith('# '))   return <h2 key={i} style={{ fontSize: 17, fontWeight: 800, background: 'linear-gradient(90deg,#7c3aed,#f43f5e)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', margin: '18px 0 12px' }}>{t.slice(2)}</h2>;
         if (/^\d+\.\s/.test(t)) {
           const m = t.match(/^\d+\.\s(.+)$/);
           return m ? <div key={i} style={{ marginBottom: 8, paddingLeft: 22, color: '#cbd5e1', fontSize: 14, lineHeight: 1.75, display: 'list-item', listStyleType: 'decimal', listStylePosition: 'outside' }}><Inline text={m[1]} /></div> : null;
@@ -269,6 +326,7 @@ export default function Workspace() {
                 summary: data.summary,
                 pages: data.page_count,
                 chunks: data.indexed_chunks,
+                file_type: data.file_type,
               },
             }));
           }
@@ -285,8 +343,11 @@ export default function Workspace() {
   const handleDrop = (e) => {
     e.preventDefault(); e.stopPropagation(); setDragOver(false);
     const f = e.dataTransfer.files?.[0];
-    if (f && (f.type === 'application/pdf' ||
-        f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')) {
+    if (!f) return;
+    // Accept any supported MIME type or check extension
+    const ext = f.name?.split('.').pop()?.toLowerCase();
+    const supported = ['pdf','docx','xlsx','xls','csv','txt','md','pptx','ipynb'];
+    if (SUPPORTED_MIMES.includes(f.type) || supported.includes(ext)) {
       setSelectedFile(f);
     }
   };
@@ -471,14 +532,14 @@ export default function Workspace() {
         <div style={{ width: 268, display: 'flex', flexDirection: 'column', height: '100%' }}>
           {/* Brand + collapse button */}
           <div className="sidebar-header">
-            <div className="sidebar-brand">
+            <Link to="/" className="sidebar-brand" style={{ textDecoration: 'none' }}>
               <svg width="26" height="26" viewBox="0 0 28 28" fill="none">
                 <rect width="28" height="28" rx="8" fill="url(#sbG)" />
                 <path d="M14 6L7 9.5V15.5C7 19.09 10.13 22.5 14 23C17.87 22.5 21 19.09 21 15.5V9.5L14 6Z" fill="white" fillOpacity="0.9" />
                 <defs><linearGradient id="sbG" x1="0" y1="0" x2="28" y2="28" gradientUnits="userSpaceOnUse"><stop stopColor="#2563eb" /><stop offset="1" stopColor="#06b6d4" /></linearGradient></defs>
               </svg>
               <span className="sidebar-brand-name">Docu<span>Mind</span></span>
-            </div>
+            </Link>
             <button onClick={() => setSidebarOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4, borderRadius: 6, display: 'flex' }}>
               <ChevronLeft size={16} />
             </button>
@@ -517,9 +578,9 @@ export default function Workspace() {
           <div style={{ padding: '12px 10px', borderTop: '1px solid var(--border-subtle)', flexShrink: 0 }}>
             <button className="upload-btn-sidebar" onClick={() => document.getElementById('sb-upload')?.click()}>
               <Upload size={13} />
-              {uploading ? 'Uploading…' : 'Upload to This Chat'}
+              {uploading ? 'Uploading…' : 'Add Document'}
             </button>
-            <input id="sb-upload" type="file" accept=".pdf,.docx" onChange={handleFileChange} style={{ display: 'none' }} multiple />
+            <input id="sb-upload" type="file" accept={SUPPORTED_ACCEPT} onChange={handleFileChange} style={{ display: 'none' }} multiple />
 
             {activeFiles.length > 0 ? (
               <div style={{ marginTop: 10 }}>
@@ -527,15 +588,16 @@ export default function Workspace() {
                 <div className="sidebar-files-list" style={{ marginTop: 4 }}>
                   {activeFiles.map((name, i) => (
                     <div key={i} className="file-item">
-                      <FileText size={10} style={{ flexShrink: 0, color: 'var(--brand-accent)' }} />
-                      <span title={name}>{name}</span>
+                      <FileText size={10} style={{ flexShrink: 0, color: 'var(--brand-secondary)' }} />
+                      <span title={name} style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                      <FileBadge filename={name} />
                     </div>
                   ))}
                 </div>
               </div>
             ) : (
               <p style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', marginTop: 8, lineHeight: 1.55 }}>
-                No files yet.<br />Upload a PDF or DOCX above.
+                No files yet.<br />Upload PDF, Excel, DOCX, PPT and more.
               </p>
             )}
           </div>
@@ -553,8 +615,9 @@ export default function Workspace() {
                   display: 'inline-block',
                 }} />
               )}
-              <button className="logout-btn" title="Sign out" onClick={() => { localStorage.clear(); navigate('/'); }}>
-                <LogOut size={16} />
+              <button className="logout-btn" title="Sign out" onClick={() => { localStorage.clear(); navigate('/'); }} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 10px', borderRadius: '6px', background: 'rgba(244, 63, 94, 0.1)', color: 'var(--brand-accent)', border: '1px solid rgba(244, 63, 94, 0.2)' }}>
+                <LogOut size={14} />
+                <span style={{ fontSize: '12px', fontWeight: 600 }}>Log Out</span>
               </button>
             </div>
           </div>
@@ -582,17 +645,22 @@ export default function Workspace() {
           <div className="upload-overlay">
             <div className="upload-card">
               <div className="upload-header">
-                <div style={{ width: 48, height: 48, borderRadius: 14, background: 'linear-gradient(135deg,rgba(37,99,235,.15),rgba(6,182,212,.1))', border: '1px solid rgba(6,182,212,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
-                  <Shield size={22} color="var(--brand-accent)" />
+                <div style={{ width: 48, height: 48, borderRadius: 14, background: 'linear-gradient(135deg,rgba(124,58,237,0.18),rgba(244,63,94,0.12))', border: '1px solid rgba(124,58,237,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
+                  <Brain size={22} color="var(--brand-secondary)" />
                 </div>
-                <h2>Process Document</h2>
-                <p>Indexed <strong>only</strong> into this session's isolated vector store</p>
+                <h2>Index Document</h2>
+                <p>Adds to this session's isolated vector store only</p>
               </div>
               <div className={`dropzone ${dragOver ? 'drag-over' : ''}`} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onClick={() => document.getElementById('ov-upload')?.click()}>
-                <Upload size={36} color="var(--text-muted)" strokeWidth={1.5} />
+                <Upload size={32} color="var(--brand-secondary)" strokeWidth={1.5} />
                 <p className="dropzone-title">{selectedFile.name}</p>
-                <span className="dropzone-hint">Click to change · PDF or DOCX up to 25 MB</span>
-                <input id="ov-upload" type="file" accept=".pdf,.docx" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) setSelectedFile(e.target.files[0]); }} />
+                <span className="dropzone-hint">Click to change file</span>
+                <div className="dropzone-formats">
+                  {['PDF','DOCX','XLSX','CSV','PPTX','TXT','IPYNB','MD'].map(f => (
+                    <span key={f} className="format-tag" style={{ background: 'rgba(124,58,237,0.08)', borderColor: 'rgba(124,58,237,0.20)', color: 'var(--brand-secondary)' }}>{f}</span>
+                  ))}
+                </div>
+                <input id="ov-upload" type="file" accept={SUPPORTED_ACCEPT} style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) setSelectedFile(e.target.files[0]); }} />
               </div>
               <button className="process-btn" onClick={handleProcessDocument} disabled={uploading}>
                 <FileText size={16} />
@@ -622,13 +690,14 @@ export default function Workspace() {
           {activeSession.history.length === 0 ? (
             <div className="chat-welcome">
               <div className="chat-welcome-icon">
-                <Shield size={28} color="var(--brand-primary)" strokeWidth={1.5} />
+                <Brain size={28} color="var(--brand-secondary)" strokeWidth={1.5} />
               </div>
               <div>
                 <h2>Welcome to DocuMind</h2>
                 <p style={{ marginTop: 10 }}>
-                  Upload a PDF or DOCX to this chat, then ask questions about it. Each chat
-                  session has its own <strong>isolated</strong> vector store — files from other sessions never interfere.
+                  Upload a document to this chat, then ask questions about it. Supports
+                  <strong> PDF, DOCX, Excel, PowerPoint, CSV, Jupyter Notebooks, TXT</strong> and more.
+                  Each session has its own <strong>isolated</strong> vector store.
                 </p>
               </div>
 
@@ -636,13 +705,13 @@ export default function Workspace() {
               {activeSummary && (
                 <div style={{
                   width: '100%', padding: '20px 24px', borderRadius: 16,
-                  background: 'linear-gradient(135deg, rgba(37,99,235,0.08) 0%, rgba(6,182,212,0.05) 100%)',
-                  border: '1px solid rgba(37,99,235,0.20)',
+                  background: 'linear-gradient(135deg, rgba(124,58,237,0.08) 0%, rgba(244,63,94,0.05) 100%)',
+                  border: '1px solid rgba(124,58,237,0.18)',
                   textAlign: 'left', animation: 'fadeUp 0.4s var(--ease-spring) both',
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                    <Sparkles size={14} color="var(--brand-accent)" />
-                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--brand-accent)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    <Sparkles size={14} color="var(--brand-secondary)" />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--brand-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                       Auto Summary · {activeSummary.filename}
                     </span>
                   </div>
@@ -652,23 +721,24 @@ export default function Workspace() {
                   <div style={{ display: 'flex', gap: 16, marginTop: 12 }}>
                     <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>📄 {activeSummary.pages} page{activeSummary.pages !== 1 ? 's' : ''}</span>
                     <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>🧩 {activeSummary.chunks} chunks indexed</span>
+                    {activeSummary.file_type && <span style={{ fontSize: 11, color: 'var(--brand-secondary)' }}>📂 {activeSummary.file_type}</span>}
                   </div>
                 </div>
               )}
 
               <div className="chat-hint-cards">
                 <div className="chat-hint-card">
-                  <div className="chat-hint-card-label">Session Isolation</div>
-                  <p>Each chat keeps its own files. New Chat starts completely fresh.</p>
+                  <div className="chat-hint-card-label">9+ File Formats</div>
+                  <p>PDF, DOCX, XLSX, CSV, PPTX, IPYNB, TXT, MD — all supported.</p>
                 </div>
                 <div className="chat-hint-card">
-                  <div className="chat-hint-card-label">Conversation Memory</div>
-                  <p>Ask follow-up questions — DocuMind remembers your last 3 turns.</p>
+                  <div className="chat-hint-card-label">Session Isolation</div>
+                  <p>Each chat has its own vector store. Files never cross sessions.</p>
                 </div>
               </div>
 
               <p style={{ fontSize: 11.5, color: 'var(--text-muted)', letterSpacing: '0.02em' }}>
-                💡 Tip: Press <kbd style={{ padding: '2px 6px', background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 10 }}>Ctrl+K</kbd> for a new chat anytime
+                💡 Press <kbd style={{ padding: '2px 6px', background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 10 }}>Ctrl+K</kbd> for a new chat
               </p>
             </div>
           ) : (
@@ -677,15 +747,22 @@ export default function Workspace() {
               {activeSummary && (
                 <div style={{
                   padding: '14px 18px', borderRadius: 12, marginBottom: 8,
-                  background: 'rgba(37,99,235,0.06)', border: '1px solid rgba(37,99,235,0.15)',
+                  background: 'rgba(124,58,237,0.06)', border: '1px solid rgba(124,58,237,0.14)',
                   display: 'flex', alignItems: 'flex-start', gap: 10,
                 }}>
-                  <Sparkles size={14} color="var(--brand-accent)" style={{ marginTop: 2, flexShrink: 0 }} />
-                  <div>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--brand-accent)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-                      {activeSummary.filename}
-                    </span>
-                    <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6, margin: '4px 0 0' }}>
+                  <Sparkles size={14} color="var(--brand-secondary)" style={{ marginTop: 2, flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--brand-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                        {activeSummary.filename}
+                      </span>
+                      {activeSummary.file_type && (
+                        <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.25)', color: 'var(--brand-secondary)', textTransform: 'uppercase' }}>
+                          {activeSummary.file_type}
+                        </span>
+                      )}
+                    </div>
+                    <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6, margin: 0 }}>
                       {activeSummary.summary}
                     </p>
                   </div>
@@ -785,15 +862,15 @@ export default function Workspace() {
         @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
         @keyframes fadeIn  { from{opacity:0} to{opacity:1} }
         @keyframes blink   { 0%,100%{opacity:1} 50%{opacity:0} }
-        @keyframes glow-pulse {
-          0%,100%{box-shadow:0 0 16px rgba(6,182,212,.12)}
-          50%{box-shadow:0 0 32px rgba(6,182,212,.28)}
+        @keyframes neon-pulse {
+          0%,100%{box-shadow:0 0 16px rgba(124,58,237,.15)}
+          50%{box-shadow:0 0 32px rgba(168,85,247,.35)}
         }
         @keyframes float {
           0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)}
         }
-        .chat-welcome-icon { animation: glow-pulse 3s ease-in-out infinite, float 4s ease-in-out infinite; }
-        .msg-bubble.assistant { padding-right: 60px; }
+        @keyframes spin { to{transform:rotate(360deg)} }
+        .chat-welcome-icon { animation: neon-pulse 3s ease-in-out infinite, float 5s ease-in-out infinite; }
       `}</style>
     </div>
   );

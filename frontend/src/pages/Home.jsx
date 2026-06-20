@@ -47,8 +47,8 @@ export default function Home() {
       <div style={{ position: 'relative', zIndex: 1, maxWidth: '900px', margin: '0 auto 80px', padding: '0 32px' }}>
         <div className="stats-bar">
           <div className="stat-item">
-            <div className="stat-number">100%</div>
-            <div className="stat-label">Offline & Private</div>
+            <div className="stat-number">9+</div>
+            <div className="stat-label">File Formats</div>
           </div>
           <div className="stat-item">
             <div className="stat-number">25MB</div>
@@ -66,12 +66,11 @@ export default function Home() {
         <div className="features-grid">
           <div className="feature-card" style={{ animationDelay: '0s' }}>
             <div className="feature-icon-wrap">
-              <Cpu size={22} color="var(--brand-accent)" />
+              <Terminal size={22} color="var(--brand-accent)" />
             </div>
-            <h3 className="feature-title">Isolated RAG Pipelines</h3>
+            <h3 className="feature-title">Smart Multi-Format Parsing</h3>
             <p className="feature-desc">
-              Each chat session maintains its own isolated vector store. Documents uploaded
-              to one session never bleed into another — strict metadata containment guaranteed.
+              Unrivaled format support. Drop in <strong>PDF, DOCX, PPTX, Excel, CSV, Markdown, TXT, and Jupyter Notebooks</strong>. DocuMind intelligently chunks and vectorizes everything seamlessly.
             </p>
           </div>
 
@@ -90,32 +89,33 @@ export default function Home() {
             <div className="feature-icon-wrap">
               <Shield size={22} color="var(--brand-accent)" />
             </div>
-            <h3 className="feature-title">Multi-Tenant Isolation</h3>
+            <h3 className="feature-title">Secure OTP Authentication</h3>
             <p className="feature-desc">
-              Authenticated sessions isolate each user's workspace and documents.
-              Enterprise-grade access control with JWT-based session management.
+              Enterprise-grade access control. Secure your workspace with 
+              two-step email verification, timed OTP rings, and JWT-based 
+              multi-tenant isolation.
             </p>
           </div>
 
           <div className="feature-card" style={{ animationDelay: '0.3s' }}>
             <div className="feature-icon-wrap">
-              <Zap size={22} color="var(--brand-accent)" />
+              <Cpu size={22} color="var(--brand-accent)" />
             </div>
-            <h3 className="feature-title">Instant Answers</h3>
+            <h3 className="feature-title">Isolated RAG Pipelines</h3>
             <p className="feature-desc">
-              Ask natural language questions and get precise, cited answers in seconds.
-              Powered by Gemma2 — no internet required, even offline.
+              Each chat session maintains its own isolated vector store. Documents uploaded
+              to one session never bleed into another — strict metadata containment guaranteed.
             </p>
           </div>
 
           <div className="feature-card" style={{ animationDelay: '0.4s' }}>
             <div className="feature-icon-wrap">
-              <Terminal size={22} color="var(--brand-accent)" />
+              <Zap size={22} color="var(--brand-accent)" />
             </div>
-            <h3 className="feature-title">Smart Document Parsing</h3>
+            <h3 className="feature-title">Instant Answers (Gemma2)</h3>
             <p className="feature-desc">
-              Supports PDF and DOCX formats with intelligent chunking and semantic
-              embedding. Handles complex layouts, tables, and multi-page documents.
+              Ask natural language questions and get precise, cited answers in seconds.
+              Powered by Ollama and Gemma2 — highly optimized for local hardware.
             </p>
           </div>
 

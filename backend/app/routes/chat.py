@@ -39,23 +39,27 @@ def _build_prompt(question: str, context: str, history: List[HistoryMessage]) ->
             turns.append(f"{role_label}: {msg.text}")
         history_block = "\n\nCONVERSATION HISTORY (for follow-up context only):\n" + "\n".join(turns)
 
-    return f"""You are DocuMind, a precise offline document intelligence assistant.
+    return f"""You are DocuMind, a precise document intelligence assistant.
+Your absolute priority is to answer the user's question using ONLY the provided document context.
 
-STRICT RULES:
-1. Answer ONLY using the DOCUMENT CONTEXT provided below.
-2. If the answer is not in the context, say: "The uploaded document does not contain information about this topic."
-3. Never say "Based on the text" or "According to the document" — go straight to the answer.
+<strict_rules>
+1. You must base your answer strictly on the text inside the <document_context> tags.
+2. If the document context does not contain the answer, you must say exactly: "The uploaded document does not contain information about this topic." Do not try to guess or use your prior knowledge.
+3. Do not start your answer with "Based on the text" or "According to the document". Just give the answer.
 4. Use clear structure: ## headings, - bullet points, numbered lists where appropriate.
-5. Be complete — do not truncate if the context has enough detail.
-6. Highlight key figures, dates, names, and technical terms in **bold**.
-7. For follow-up questions, use CONVERSATION HISTORY to understand context but still answer from DOCUMENT CONTEXT only.{history_block}
-
-DOCUMENT CONTEXT:
+5. Highlight key figures, dates, names, and technical terms in **bold**.
+6. If the context contains an image marker (e.g., `[Image available at: /api/images/...]`) and it is relevant to the user's question, you MUST include it in your response exactly like this: `![Relevant Image](/api/images/...)`.
+</strict_rules>
+{history_block}
+<document_context>
 {context}
+</document_context>
 
-USER QUESTION: {question}
+<user_question>
+{question}
+</user_question>
 
-ANSWER:"""
+Answer:"""
 
 
 def _retrieve_context(question: str, session_id: str):

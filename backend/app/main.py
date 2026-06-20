@@ -1,15 +1,27 @@
 import os
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 load_dotenv()
 
+from app.database import engine, Base
 from app.routes import documents, chat
+from app.routes import auth
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Create all database tables on startup."""
+    Base.metadata.create_all(bind=engine)
+    print("[OK] Database tables ready.")
+    yield
 
 app = FastAPI(
     title="DocuMind API",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -20,6 +32,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
 app.include_router(documents.router)
 app.include_router(chat.router)
 

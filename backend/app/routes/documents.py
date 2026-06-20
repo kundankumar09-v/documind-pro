@@ -1,11 +1,37 @@
+import os
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from fastapi.responses import JSONResponse
-from app.services.parser import DocumentParser
+from fastapi.responses import JSONResponse, FileResponse
+from app.services.parser import DocumentParser, IMAGES_DIR
 from app.services.vector_store import VectorStoreService
 from langchain_ollama import ChatOllama
 
 router = APIRouter(prefix="/api", tags=["Documents"])
 vector_service = VectorStoreService()
+
+# ── Supported file types ───────────────────────────────────────────────────────
+SUPPORTED_EXTENSIONS = {
+    "pdf":   "pdf",
+    "docx":  "docx",
+    "xlsx":  "excel",
+    "xls":   "excel",
+    "csv":   "csv",
+    "txt":   "txt",
+    "md":    "txt",
+    "pptx":  "pptx",
+    "ipynb": "ipynb",
+}
+
+EXTENSION_LABELS = {
+    "pdf":   "PDF Document",
+    "docx":  "Word Document",
+    "xlsx":  "Excel Spreadsheet",
+    "xls":   "Excel Spreadsheet (Legacy)",
+    "csv":   "CSV Spreadsheet",
+    "txt":   "Plain Text",
+    "md":    "Markdown Document",
+    "pptx":  "PowerPoint Presentation",
+    "ipynb": "Jupyter Notebook",
+}
 
 
 @router.post("/upload")
@@ -14,18 +40,35 @@ async def upload_document(
     session_id: str = Form(...)
 ):
     filename = file.filename or "unnamed_file"
-    extension = filename.split(".")[-1].lower() if "." in filename else ""
+    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
 
-    if extension not in ["pdf", "docx"]:
-        raise HTTPException(status_code=400, detail="Only PDF and DOCX files are supported.")
+    if extension not in SUPPORTED_EXTENSIONS:
+        supported_list = ", ".join(f".{ext}" for ext in SUPPORTED_EXTENSIONS)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '.{extension}'. Supported formats: {supported_list}"
+        )
 
     try:
         file_bytes = await file.read()
+        file_type = SUPPORTED_EXTENSIONS[extension]
 
-        if extension == "pdf":
+        if file_type == "pdf":
             parsed_data = DocumentParser.parse_pdf_advanced(file_bytes)
-        else:
+        elif file_type == "docx":
             parsed_data = DocumentParser.parse_docx_advanced(file_bytes)
+        elif file_type == "excel":
+            parsed_data = DocumentParser.parse_excel(file_bytes)
+        elif file_type == "csv":
+            parsed_data = DocumentParser.parse_csv(file_bytes)
+        elif file_type == "txt":
+            parsed_data = DocumentParser.parse_txt(file_bytes)
+        elif file_type == "pptx":
+            parsed_data = DocumentParser.parse_pptx(file_bytes)
+        elif file_type == "ipynb":
+            parsed_data = DocumentParser.parse_ipynb(file_bytes)
+        else:
+            raise HTTPException(status_code=400, detail="Unrecognized file type.")
 
         if not parsed_data or not parsed_data.get("text"):
             raise HTTPException(status_code=422, detail="No readable text detected in document.")
@@ -42,6 +85,7 @@ async def upload_document(
 
         return {
             "filename": filename,
+            "file_type": EXTENSION_LABELS.get(extension, extension.upper()),
             "page_count": parsed_data.get("page_count", 1),
             "indexed_chunks": indexed_chunks,
             "summary": summary,
@@ -93,3 +137,12 @@ async def check_model_health():
         return {"status": "ok", "model": "gemma2:2b"}
     except Exception as exc:
         return {"status": "error", "detail": str(exc)}
+
+
+@router.get("/images/{filename}")
+async def get_image(filename: str):
+    """Serve an extracted document image."""
+    filepath = os.path.join(IMAGES_DIR, filename)
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="Image not found")
+    return FileResponse(filepath)
